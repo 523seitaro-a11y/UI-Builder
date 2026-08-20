@@ -16,6 +16,9 @@ public class MoveL : MonoBehaviour
     // スプライトが押されている間だけ true になります。
     private bool isPressed;
 
+    // 接触中の壁を調べるための配列です。毎フレームのメモリ確保を防ぐため再利用します。
+    private readonly ContactPoint2D[] contactPoints = new ContactPoint2D[8];
+
     private void Awake()
     {
         // Inspectorで未設定の場合は、名前が「Player」のオブジェクトから自動取得します。
@@ -59,6 +62,14 @@ public class MoveL : MonoBehaviour
             return;
         }
 
+        // 左側の壁に触れているときは、壁へ押し付ける速度を与えません。
+        // 上下速度には触れないため、壁際でもジャンプや落下が止まりません。
+        if (IsTouchingWallInMoveDirection(Vector2.left))
+        {
+            StopHorizontalMovement();
+            return;
+        }
+
         // 落下やジャンプの上下速度は保ったまま、左方向へ一定速度で移動します。
         Vector2 velocity = playerBody.linearVelocity;
         velocity.x = -moveSpeed;
@@ -82,5 +93,24 @@ public class MoveL : MonoBehaviour
         Vector2 velocity = playerBody.linearVelocity;
         velocity.x = 0f;
         playerBody.linearVelocity = velocity;
+    }
+
+    /// <summary>
+    /// プレイヤーが指定した移動方向の壁に接しているかを調べます。
+    /// </summary>
+    private bool IsTouchingWallInMoveDirection(Vector2 moveDirection)
+    {
+        int contactCount = playerBody.GetContacts(contactPoints);
+
+        for (int i = 0; i < contactCount; i++)
+        {
+            // 壁から受ける法線が移動方向と逆向きなら、その方向に壁があります。
+            if (Vector2.Dot(contactPoints[i].normal, moveDirection) < -0.5f)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
