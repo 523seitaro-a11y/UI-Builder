@@ -4,8 +4,10 @@ using UnityEngine;
 /// このスクリプトを付けたスプライトを押している間、プレイヤーが左へ進みます。
 /// スプライトには、クリック判定に使う Collider2D が必要です。
 /// </summary>
-public class MoveL : MonoBehaviour
+public class MoveL : MonoBehaviour, BlockManager.IBlockOperationState
 {
+    public bool IsOperating => isPressed;
+
     [Header("左移動の設定")]
     [Tooltip("左へ動かすプレイヤーの Rigidbody2D を指定します。")]
     [SerializeField] private Rigidbody2D playerBody;
@@ -79,6 +81,12 @@ public class MoveL : MonoBehaviour
     private void OnDisable()
     {
         // オブジェクトが無効になった場合も、押しっぱなし状態を解除します。
+        isPressed = false;
+        StopHorizontalMovement();
+    }
+
+    public void CancelOperation()
+    {
         isPressed = false;
         StopHorizontalMovement();
     }

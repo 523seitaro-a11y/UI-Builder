@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.Tilemaps;
 
 /// <summary>
@@ -9,6 +10,37 @@ using UnityEngine.Tilemaps;
 /// </summary>
 public class BlockManager : MonoBehaviour
 {
+    public interface IBlockOperationState
+    {
+        bool IsOperating { get; }
+        void CancelOperation();
+    }
+
+    public event Action<bool> DragStateChanged;
+
+    public bool IsDragging => activePreview != null;
+    public bool IsBuildMode { get; private set; } = true;
+    public bool AllBlocksPlaced
+    {
+        get
+        {
+            if (blocks.Length == 0)
+            {
+                return false;
+            }
+
+            foreach (BlockDefinition block in blocks)
+            {
+                if (block == null || block.availableCount < 0 || block.usedCount < block.availableCount)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+    }
+
     [Serializable]
     private sealed class BlockDefinition
     {
@@ -34,6 +66,20 @@ public class BlockManager : MonoBehaviour
         public bool hideSourceWhenExhausted = true;
 
         [NonSerialized] public int usedCount;
+        [NonSerialized] public Vector3 sourceBaseScale;
+    }
+
+    private sealed class PlacedBlock
+    {
+        public GameObject instance;
+        public BlockDefinition definition;
+        public Vector3Int cell;
+        public Vector3 baseScale;
+        public SpriteRenderer[] renderers;
+        public Color[] baseColors;
+        public Material[] baseMaterials;
+        public IBlockOperationState[] operationStates;
+        public bool isColorInverted;
     }
 
     [Header("必須参照")]
@@ -46,6 +92,9 @@ public class BlockManager : MonoBehaviour
     [Tooltip("配置後のブロックをまとめる親Transformです。未設定ならTilemapと同じ親を使用します。")]
     [SerializeField] private Transform placedBlockParent;
 
+    [Tooltip("プレイヤー開始位置とゴール位置を配置禁止にするためのStageManagerです。")]
+    [SerializeField] private StageManager stageManager;
+
     [Header("配置するブロック")]
     [SerializeField] private BlockDefinition[] blocks = Array.Empty<BlockDefinition>();
 
@@ -55,6 +104,10 @@ public class BlockManager : MonoBehaviour
 
     [Tooltip("配置できるグリッドの大きさです。Xが横、Yが縦です（例: X=8、Y=16で8×16）。")]
     [SerializeField] private Vector2Int placementGridSize = new Vector2Int(18, 16);
+
+    [Header("配置ブロックのTilemap複合")]
+    [Tooltip("配置セルへ透明なCollider Tileを追加し、TilemapのCompositeCollider2Dへ統合します。")]
+    [SerializeField] private bool mergePlacedBlocksIntoTilemap = true;
 
     [Header("ドラッグ中の表示")]
     [SerializeField] private Color validPreviewColor = new Color(0.55f, 1f, 0.55f, 0.8f);
@@ -78,7 +131,33 @@ public class BlockManager : MonoBehaviour
     [Tooltip("シーン内の生成元GameObjectをプレイ開始時に非表示にします。通常はONにします。")]
     [SerializeField] private bool hideWorldTemplatesAtRuntime = true;
 
+    [Header("上部ブロックのホバー表示")]
+    [Tooltip("カーソルを合わせたときの拡大倍率です。1で元のサイズ、1.2で120%になります。")]
+    [Min(1f)]
+    [SerializeField] private float sourceHoverScaleMultiplier = 1.15f;
+
+    [Tooltip("ホバー時にサイズが変化する速さです。0なら瞬時に切り替わります。")]
+    [Min(0f)]
+    [SerializeField] private float sourceHoverScaleSpeed;
+
+    [Header("配置済みブロックのホバー表示")]
+    [Tooltip("カーソルを合わせた配置済みブロックの拡大倍率です。")]
+    [Min(1f)]
+    [SerializeField] private float placedHoverScaleMultiplier = 1.15f;
+
+    [Tooltip("配置済みブロックのサイズが変化する速さです。0なら瞬時に切り替わります。")]
+    [Min(0f)]
+    [SerializeField] private float placedHoverScaleSpeed;
+
+    [Header("プレイ中の操作表示")]
+    [Tooltip("操作中の配置ブロックの色を反転します。")]
+    [SerializeField] private bool invertOperatingBlockColors = true;
+
+    [Tooltip("色反転に使用するSprite用Shaderです。")]
+    [SerializeField] private Shader operationInversionShader;
+
     private readonly HashSet<Vector3Int> occupiedCells = new HashSet<Vector3Int>();
+    private readonly List<PlacedBlock> placedBlocks = new List<PlacedBlock>();
     private readonly List<SpriteRenderer> previewRenderers = new List<SpriteRenderer>();
     private readonly List<Color> previewOriginalColors = new List<Color>();
     private readonly List<Collider2D> previewColliders = new List<Collider2D>();
@@ -88,9 +167,14 @@ public class BlockManager : MonoBehaviour
     private readonly List<SpriteRenderer> gridPreviewRenderers = new List<SpriteRenderer>();
     private readonly List<Color> gridPreviewOriginalColors = new List<Color>();
 
+    private Tile runtimeColliderTile;
+    private TilemapCollider2D placementTilemapCollider;
+    private Material operationInversionMaterial;
+
     private BlockDefinition activeDefinition;
     private GameObject activePreview;
     private GameObject activeGridPreview;
+    private PlacedBlock activePlacedBlock;
     private Vector3Int activeCell;
     private bool activeCellIsValid;
 
@@ -111,6 +195,29 @@ public class BlockManager : MonoBehaviour
             placedBlockParent = placementTilemap.transform.parent;
         }
 
+        if (mergePlacedBlocksIntoTilemap && placementTilemap != null)
+        {
+            placementTilemapCollider = placementTilemap.GetComponent<TilemapCollider2D>();
+            runtimeColliderTile = ScriptableObject.CreateInstance<Tile>();
+            runtimeColliderTile.name = "Placed Block Collider Tile";
+            runtimeColliderTile.colliderType = Tile.ColliderType.Grid;
+            runtimeColliderTile.hideFlags = HideFlags.HideAndDontSave;
+        }
+
+        if (operationInversionShader != null)
+        {
+            operationInversionMaterial = new Material(operationInversionShader)
+            {
+                name = "Block Operation Inversion",
+                hideFlags = HideFlags.HideAndDontSave
+            };
+        }
+
+        if (stageManager == null)
+        {
+            stageManager = FindFirstObjectByType<StageManager>();
+        }
+
         if (hideWorldTemplatesAtRuntime)
         {
             foreach (BlockDefinition block in blocks)
@@ -121,10 +228,27 @@ public class BlockManager : MonoBehaviour
                 }
             }
         }
+
+        foreach (BlockDefinition block in blocks)
+        {
+            if (block != null && block.dragSource != null)
+            {
+                block.sourceBaseScale = block.dragSource.localScale;
+            }
+        }
     }
 
     private void Update()
     {
+        if (!IsBuildMode)
+        {
+            UpdateOperationColors();
+            return;
+        }
+
+        UpdateSourceHover(Input.mousePosition, Input.touchCount == 0);
+        UpdatePlacedBlockHover(Input.mousePosition, Input.touchCount == 0 && !IsPointerOverUi());
+
         if (!TryGetPointerState(out Vector2 screenPosition, out PointerPhase phase))
         {
             return;
@@ -132,7 +256,10 @@ public class BlockManager : MonoBehaviour
 
         if (phase == PointerPhase.Began)
         {
-            TryBeginDrag(screenPosition);
+            if (!TryBeginDrag(screenPosition) && !IsPointerOverUi())
+            {
+                TryBeginPlacedBlockDrag(screenPosition);
+            }
         }
 
         if (activePreview == null)
@@ -148,12 +275,65 @@ public class BlockManager : MonoBehaviour
         }
     }
 
-    private void TryBeginDrag(Vector2 screenPosition)
+    private void UpdatePlacedBlockHover(Vector2 screenPosition, bool allowHover)
+    {
+        PlacedBlock hovered = allowHover && activePreview == null
+            ? FindPlacedBlock(screenPosition)
+            : null;
+        float interpolation = placedHoverScaleSpeed <= 0f
+            ? 1f
+            : 1f - Mathf.Exp(-placedHoverScaleSpeed * Time.unscaledDeltaTime);
+
+        foreach (PlacedBlock block in placedBlocks)
+        {
+            if (block.instance == null)
+            {
+                continue;
+            }
+
+            Vector3 target = block.baseScale *
+                             (block == hovered ? Mathf.Max(1f, placedHoverScaleMultiplier) : 1f);
+            block.instance.transform.localScale = Vector3.Lerp(
+                block.instance.transform.localScale,
+                target,
+                interpolation);
+        }
+    }
+
+    private void UpdateSourceHover(Vector2 screenPosition, bool allowHover)
+    {
+        float interpolation = sourceHoverScaleSpeed <= 0f
+            ? 1f
+            : 1f - Mathf.Exp(-sourceHoverScaleSpeed * Time.unscaledDeltaTime);
+
+        foreach (BlockDefinition block in blocks)
+        {
+            if (block == null || block.dragSource == null)
+            {
+                continue;
+            }
+
+            bool isHovered = allowHover &&
+                             block.dragSource.gameObject.activeInHierarchy &&
+                             RectTransformUtility.RectangleContainsScreenPoint(
+                                 block.dragSource,
+                                 screenPosition,
+                                 GetUiCamera(block.dragSource));
+            Vector3 targetScale = block.sourceBaseScale *
+                                  (isHovered ? Mathf.Max(1f, sourceHoverScaleMultiplier) : 1f);
+            block.dragSource.localScale = Vector3.Lerp(
+                block.dragSource.localScale,
+                targetScale,
+                interpolation);
+        }
+    }
+
+    private bool TryBeginDrag(Vector2 screenPosition)
     {
         if (placementCamera == null || placementTilemap == null)
         {
             Debug.LogWarning("BlockManager: CameraまたはTilemapが設定されていません。", this);
-            return;
+            return false;
         }
 
         foreach (BlockDefinition block in blocks)
@@ -164,35 +344,84 @@ public class BlockManager : MonoBehaviour
                 continue;
             }
 
-            activeDefinition = block;
-            activePreview = Instantiate(block.worldTemplate, placedBlockParent);
-            activePreview.name = string.IsNullOrWhiteSpace(block.displayName)
+            GameObject preview = Instantiate(block.worldTemplate, placedBlockParent);
+            preview.name = string.IsNullOrWhiteSpace(block.displayName)
                 ? block.worldTemplate.name
                 : block.displayName;
-            activeGridPreview = Instantiate(block.worldTemplate, placedBlockParent);
-            activeGridPreview.name = $"{activePreview.name} (Grid Preview)";
+            BeginWorldDrag(block, preview);
 
-            // inactiveの生成元から複製した直後に、ドラッグ中は不要な
-            // 当たり判定と動作用Behaviourを止めてから表示します。
-            CacheAndDisablePreviewComponents();
-            CachePreviewRenderers();
-            PrepareGridPreview();
-            activePreview.SetActive(true);
-            activeGridPreview.SetActive(true);
-
-            // 掴んだブロックは上部の一覧から一旦消します。
-            // 配置できなかった場合だけ EndDrag で元に戻します。
             block.dragSource.gameObject.SetActive(false);
-
-            return;
+            return true;
         }
+
+        return false;
+    }
+
+    private bool TryBeginPlacedBlockDrag(Vector2 screenPosition)
+    {
+        PlacedBlock block = FindPlacedBlock(screenPosition);
+        if (block == null)
+        {
+            return false;
+        }
+
+        ApplyOperationColor(block, false);
+        activePlacedBlock = block;
+        block.instance.transform.localScale = block.baseScale;
+        placedBlocks.Remove(block);
+        RemoveOccupiedCells(block.definition, block.cell);
+        BeginWorldDrag(block.definition, block.instance);
+        return true;
+    }
+
+    private void BeginWorldDrag(BlockDefinition definition, GameObject preview)
+    {
+        activeDefinition = definition;
+        activePreview = preview;
+        activeGridPreview = Instantiate(definition.worldTemplate, placedBlockParent);
+        activeGridPreview.name = $"{activePreview.name} (Grid Preview)";
+
+        CacheAndDisablePreviewComponents();
+        CachePreviewRenderers();
+        PrepareGridPreview();
+        activePreview.SetActive(true);
+        activeGridPreview.SetActive(true);
+        DragStateChanged?.Invoke(true);
+    }
+
+    private PlacedBlock FindPlacedBlock(Vector2 screenPosition)
+    {
+        Vector3 point = ScreenToWorld(screenPosition);
+        for (int i = placedBlocks.Count - 1; i >= 0; i--)
+        {
+            PlacedBlock block = placedBlocks[i];
+            if (block.instance == null)
+            {
+                continue;
+            }
+
+            Collider2D[] colliders = block.instance.GetComponentsInChildren<Collider2D>();
+            foreach (Collider2D collider in colliders)
+            {
+                if (collider.enabled && collider.OverlapPoint(point))
+                {
+                    return block;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private Vector3 ScreenToWorld(Vector2 screenPosition)
+    {
+        float depth = Mathf.Abs(placementCamera.transform.position.z - placementTilemap.transform.position.z);
+        return placementCamera.ScreenToWorldPoint(new Vector3(screenPosition.x, screenPosition.y, depth));
     }
 
     private void UpdatePreview(Vector2 screenPosition)
     {
-        Vector3 screenPoint = new Vector3(screenPosition.x, screenPosition.y,
-            Mathf.Abs(placementCamera.transform.position.z - placementTilemap.transform.position.z));
-        Vector3 worldPoint = placementCamera.ScreenToWorldPoint(screenPoint);
+        Vector3 worldPoint = ScreenToWorld(screenPosition);
 
         Vector2Int footprint = GetValidFootprint(activeDefinition);
         Vector3 footprintSelectionOffset =
@@ -214,20 +443,11 @@ public class BlockManager : MonoBehaviour
     {
         if (activeCellIsValid)
         {
-            // 配置を確定する瞬間だけ、占有セル全体の中心へスナップします。
-            activePreview.transform.position = GetSnappedPosition(activeDefinition, activeCell);
-            RegisterOccupiedCells(activeDefinition, activeCell);
-            RestorePreviewAppearance();
-            RestorePreviewComponents();
-            Destroy(activeGridPreview);
-
-            activeDefinition.usedCount++;
-            if (activeDefinition.availableCount >= 0 &&
-                activeDefinition.usedCount >= activeDefinition.availableCount &&
-                activeDefinition.hideSourceWhenExhausted)
-            {
-                activeDefinition.dragSource.gameObject.SetActive(false);
-            }
+            PlaceActiveBlock(activeCell);
+        }
+        else if (activePlacedBlock != null)
+        {
+            PlaceActiveBlock(activePlacedBlock.cell);
         }
         else
         {
@@ -237,6 +457,127 @@ public class BlockManager : MonoBehaviour
         }
 
         ClearDragState();
+    }
+
+    private void PlaceActiveBlock(Vector3Int cell)
+    {
+        bool isNew = activePlacedBlock == null;
+        activePreview.transform.position = GetSnappedPosition(activeDefinition, cell);
+        RestorePreviewAppearance();
+        RestorePreviewComponents();
+        SetPlacedCollidersAsTriggers();
+        Destroy(activeGridPreview);
+        RegisterOccupiedCells(activeDefinition, cell);
+
+        PlacedBlock block = activePlacedBlock ?? CreatePlacedBlock();
+        block.cell = cell;
+        block.instance.transform.localScale = block.baseScale;
+        placedBlocks.Add(block);
+
+        if (!isNew)
+        {
+            return;
+        }
+
+        activeDefinition.usedCount++;
+        if (activeDefinition.availableCount >= 0 &&
+            activeDefinition.usedCount >= activeDefinition.availableCount &&
+            activeDefinition.hideSourceWhenExhausted)
+        {
+            activeDefinition.dragSource.gameObject.SetActive(false);
+        }
+    }
+
+    public void SetBuildMode(bool isBuildMode)
+    {
+        IsBuildMode = isBuildMode;
+
+        foreach (PlacedBlock block in placedBlocks)
+        {
+            ApplyOperationColor(block, false);
+
+            if (!isBuildMode)
+            {
+                continue;
+            }
+
+            foreach (IBlockOperationState state in block.operationStates)
+            {
+                state.CancelOperation();
+            }
+        }
+    }
+
+    private PlacedBlock CreatePlacedBlock()
+    {
+        SpriteRenderer[] renderers = activePreview.GetComponentsInChildren<SpriteRenderer>(true);
+        Color[] colors = new Color[renderers.Length];
+        Material[] materials = new Material[renderers.Length];
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            colors[i] = renderers[i].color;
+            materials[i] = renderers[i].sharedMaterial;
+        }
+
+        MonoBehaviour[] behaviours = activePreview.GetComponentsInChildren<MonoBehaviour>(true);
+        List<IBlockOperationState> states = new List<IBlockOperationState>();
+        foreach (MonoBehaviour behaviour in behaviours)
+        {
+            if (behaviour is IBlockOperationState state)
+            {
+                states.Add(state);
+            }
+        }
+
+        return new PlacedBlock
+        {
+            instance = activePreview,
+            definition = activeDefinition,
+            baseScale = activePreview.transform.localScale,
+            renderers = renderers,
+            baseColors = colors,
+            baseMaterials = materials,
+            operationStates = states.ToArray()
+        };
+    }
+
+    private void UpdateOperationColors()
+    {
+        foreach (PlacedBlock block in placedBlocks)
+        {
+            bool isOperating = false;
+            foreach (IBlockOperationState state in block.operationStates)
+            {
+                if (state.IsOperating)
+                {
+                    isOperating = true;
+                    break;
+                }
+            }
+
+            ApplyOperationColor(block, invertOperatingBlockColors && isOperating);
+        }
+    }
+
+    private void ApplyOperationColor(PlacedBlock block, bool inverted)
+    {
+        if (block == null || block.isColorInverted == inverted)
+        {
+            return;
+        }
+
+        for (int i = 0; i < block.renderers.Length; i++)
+        {
+            Color color = block.baseColors[i];
+            block.renderers[i].sharedMaterial = inverted && operationInversionMaterial != null
+                ? operationInversionMaterial
+                : block.baseMaterials[i];
+            block.renderers[i].color = inverted && operationInversionMaterial == null
+                ? new Color(1f - color.r, 1f - color.g, 1f - color.b, color.a)
+                : color;
+        }
+
+        block.isColorInverted = inverted;
     }
 
     private Vector3 GetSnappedPosition(BlockDefinition definition, Vector3Int origin)
@@ -261,6 +602,7 @@ public class BlockManager : MonoBehaviour
                 Vector3Int cell = origin + new Vector3Int(x, y, 0);
                 if (!IsInsidePlacementBounds(cell) ||
                     placementTilemap.HasTile(cell) ||
+                    (stageManager != null && stageManager.IsBlockPlacementReservedCell(cell)) ||
                     occupiedCells.Contains(cell))
                 {
                     return false;
@@ -290,6 +632,10 @@ public class BlockManager : MonoBehaviour
     {
         placementGridSize.x = Mathf.Max(1, placementGridSize.x);
         placementGridSize.y = Mathf.Max(1, placementGridSize.y);
+        sourceHoverScaleMultiplier = Mathf.Max(1f, sourceHoverScaleMultiplier);
+        sourceHoverScaleSpeed = Mathf.Max(0f, sourceHoverScaleSpeed);
+        placedHoverScaleMultiplier = Mathf.Max(1f, placedHoverScaleMultiplier);
+        placedHoverScaleSpeed = Mathf.Max(0f, placedHoverScaleSpeed);
     }
 
     private void OnDrawGizmosSelected()
@@ -317,8 +663,48 @@ public class BlockManager : MonoBehaviour
         {
             for (int x = 0; x < footprint.x; x++)
             {
-                occupiedCells.Add(origin + new Vector3Int(x, y, 0));
+                Vector3Int cell = origin + new Vector3Int(x, y, 0);
+                occupiedCells.Add(cell);
+                SetCompositeTile(cell, runtimeColliderTile);
             }
+        }
+
+        RefreshCompositeCollider();
+    }
+
+    private void RemoveOccupiedCells(BlockDefinition definition, Vector3Int origin)
+    {
+        Vector2Int footprint = GetValidFootprint(definition);
+        for (int y = 0; y < footprint.y; y++)
+        {
+            for (int x = 0; x < footprint.x; x++)
+            {
+                Vector3Int cell = origin + new Vector3Int(x, y, 0);
+                occupiedCells.Remove(cell);
+
+                if (placementTilemap != null && placementTilemap.GetTile(cell) == runtimeColliderTile)
+                {
+                    SetCompositeTile(cell, null);
+                }
+            }
+        }
+
+        RefreshCompositeCollider();
+    }
+
+    private void SetCompositeTile(Vector3Int cell, TileBase tile)
+    {
+        if (mergePlacedBlocksIntoTilemap && placementTilemap != null && runtimeColliderTile != null)
+        {
+            placementTilemap.SetTile(cell, tile);
+        }
+    }
+
+    private void RefreshCompositeCollider()
+    {
+        if (placementTilemapCollider != null && placementTilemapCollider.hasTilemapChanges)
+        {
+            placementTilemapCollider.ProcessTilemapChanges();
         }
     }
 
@@ -434,33 +820,76 @@ public class BlockManager : MonoBehaviour
         }
     }
 
+    private void SetPlacedCollidersAsTriggers()
+    {
+        if (!mergePlacedBlocksIntoTilemap)
+        {
+            return;
+        }
+
+        foreach (Collider2D placedCollider in previewColliders)
+        {
+            placedCollider.isTrigger = true;
+        }
+    }
+
+    private void OnDestroy()
+    {
+        if (runtimeColliderTile != null)
+        {
+            Destroy(runtimeColliderTile);
+        }
+
+        if (operationInversionMaterial != null)
+        {
+            Destroy(operationInversionMaterial);
+        }
+    }
+
     private void OnDisable()
     {
         if (activePreview != null)
         {
-            Destroy(activePreview);
-
-            if (activeGridPreview != null)
+            if (activePlacedBlock != null)
             {
-                Destroy(activeGridPreview);
+                PlaceActiveBlock(activePlacedBlock.cell);
             }
-
-            // シーン切り替え以外の理由でManagerが無効になった場合も、
-            // 途中だったドラッグ元を失わないよう復帰させます。
-            if (activeDefinition != null && activeDefinition.dragSource != null)
+            else
             {
+                Destroy(activePreview);
+                Destroy(activeGridPreview);
                 activeDefinition.dragSource.gameObject.SetActive(true);
             }
 
             ClearDragState();
         }
+
+        foreach (BlockDefinition block in blocks)
+        {
+            if (block != null && block.dragSource != null && block.sourceBaseScale != Vector3.zero)
+            {
+                block.dragSource.localScale = block.sourceBaseScale;
+            }
+        }
+
+        foreach (PlacedBlock block in placedBlocks)
+        {
+            ApplyOperationColor(block, false);
+
+            if (block.instance != null)
+            {
+                block.instance.transform.localScale = block.baseScale;
+            }
+        }
     }
 
     private void ClearDragState()
     {
+        bool wasDragging = activePreview != null;
         activeDefinition = null;
         activePreview = null;
         activeGridPreview = null;
+        activePlacedBlock = null;
         activeCellIsValid = false;
         previewRenderers.Clear();
         previewOriginalColors.Clear();
@@ -470,6 +899,11 @@ public class BlockManager : MonoBehaviour
         previewBehaviourStates.Clear();
         gridPreviewRenderers.Clear();
         gridPreviewOriginalColors.Clear();
+
+        if (wasDragging)
+        {
+            DragStateChanged?.Invoke(false);
+        }
     }
 
     private static bool TryGetPointerState(out Vector2 position, out PointerPhase phase)
@@ -507,6 +941,18 @@ public class BlockManager : MonoBehaviour
 
         phase = PointerPhase.None;
         return false;
+    }
+
+    private static bool IsPointerOverUi()
+    {
+        if (EventSystem.current == null)
+        {
+            return false;
+        }
+
+        return Input.touchCount > 0
+            ? EventSystem.current.IsPointerOverGameObject(Input.GetTouch(0).fingerId)
+            : EventSystem.current.IsPointerOverGameObject();
     }
 
     private enum PointerPhase

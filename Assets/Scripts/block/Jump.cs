@@ -4,8 +4,10 @@ using UnityEngine;
 /// このスクリプトを付けたスプライトをクリックすると、プレイヤーがジャンプします。
 /// スプライトには、クリック判定に使う Collider2D が必要です。
 /// </summary>
-public class Jump : MonoBehaviour
+public class Jump : MonoBehaviour, BlockManager.IBlockOperationState
 {
+    public bool IsOperating => isJumping;
+
     [Header("ジャンプの設定")]
     [Tooltip("ジャンプさせるプレイヤーの Rigidbody2D を指定します。")]
     [SerializeField] private Rigidbody2D playerBody;
@@ -21,6 +23,7 @@ public class Jump : MonoBehaviour
     [SerializeField] private float minimumGroundNormalY = 0.5f;
 
     private readonly ContactPoint2D[] contacts = new ContactPoint2D[8];
+    private bool isJumping;
 
     private void Awake()
     {
@@ -52,8 +55,21 @@ public class Jump : MonoBehaviour
         }
 
         // Impulseを使い、クリックした瞬間に上向きの力を加えます。
+        isJumping = true;
         playerBody.AddForce(Vector2.up * jumpPower, ForceMode2D.Impulse);
     }
+
+    private void FixedUpdate()
+    {
+        if (isJumping && IsGrounded())
+        {
+            isJumping = false;
+        }
+    }
+
+    public void CancelOperation() => isJumping = false;
+
+    private void OnDisable() => CancelOperation();
 
     private bool IsGrounded()
     {
