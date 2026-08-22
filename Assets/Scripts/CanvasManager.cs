@@ -13,6 +13,15 @@ public class CanvasManager : MonoBehaviour
     [Tooltip("ドラッグ状態を監視するBlockManagerです。")]
     [SerializeField] private BlockManager blockManager;
 
+    [Header("ステージの配置完了条件")]
+    [Tooltip("このステージで配置完了と判定するブロック数です。")]
+    [Min(1)]
+    [SerializeField] private int requiredPlacedBlockCount = 1;
+
+    public bool AreRequiredBlocksPlaced =>
+        blockManager != null &&
+        blockManager.PlacedBlockCount >= Mathf.Max(1, requiredPlacedBlockCount);
+
     [Tooltip("ドラッグ中またはSwitch操作で上へ移動させる、画面上部のRectTransformです。")]
     [SerializeField] private RectTransform upperBlockPanel;
 
@@ -36,10 +45,22 @@ public class CanvasManager : MonoBehaviour
     [SerializeField] private Color gameStartHoverColor = Color.black;
     [SerializeField] private Color gameStartHoverTextColor = Color.white;
 
-    [Header("上部パネルの移動")]
-    [Tooltip("ドラッグ中に上方向へ移動する距離です。")]
+    [Tooltip("カーソルを合わせたときのGameStartButtonのY方向拡大倍率です。")]
+    [Min(1f)]
+    [SerializeField] private float gameStartHoverScaleY = 1.08f;
+
+    [Tooltip("GameStartButtonのYスケールが変化する時間です。")]
     [Min(0f)]
-    [SerializeField] private float upwardMoveDistance = 220f;
+    [SerializeField] private float gameStartHoverScaleDuration = 0.12f;
+
+    [SerializeField] private Ease gameStartHoverScaleEase = Ease.OutCubic;
+
+    [Header("上部パネルの移動")]
+    [Tooltip("ブロック一覧を表示し、ドラッグできるDown状態のAnchored Position Yです。ステージごとに調整できます。")]
+    [SerializeField] private float downPanelPositionY = 1000f;
+
+    [Tooltip("ブロック一覧を上へ退避したUp状態のAnchored Position Yです。")]
+    [SerializeField] private float upPanelPositionY = 1180f;
 
     [Tooltip("上へ移動するときの時間です。短いほど素早く移動します。")]
     [Min(0f)]
@@ -60,15 +81,23 @@ public class CanvasManager : MonoBehaviour
     private bool hasOriginalPosition;
     private bool isDragging;
     private bool isManuallyRaised;
+    private bool wereRequiredBlocksPlaced;
     private Color gameStartNormalColor;
     private Color gameStartNormalTextColor;
     private bool hasGameStartColors;
+    private Vector3 gameStartNormalScale;
+    private Vector3 gameStartTextNormalScale;
+    private bool hasGameStartScale;
+    private bool hasGameStartTextScale;
+    private bool isGameStartHovered;
+    private Tweener gameStartScaleTween;
 
     private void Awake()
     {
         FindMissingReferences();
         CacheOriginalPosition();
         CacheGameStartColors();
+        CacheGameStartScale();
     }
 
     private void OnEnable()
@@ -76,17 +105,25 @@ public class CanvasManager : MonoBehaviour
         FindMissingReferences();
         CacheOriginalPosition();
         CacheGameStartColors();
+        CacheGameStartScale();
 
         if (blockManager != null)
         {
             blockManager.DragStateChanged += HandleDragStateChanged;
             isDragging = blockManager.IsDragging;
+            wereRequiredBlocksPlaced = AreRequiredBlocksPlaced;
+            if (wereRequiredBlocksPlaced)
+            {
+                isManuallyRaised = false;
+            }
+
             SetPanelPosition(ShouldRaisePanel, false);
         }
     }
 
     private void Update()
     {
+        UpdateRequiredBlocksPlacedState();
         UpdateGameStartButtonHover(Input.mousePosition, Input.touchCount == 0);
 
         if (panelSwitch == null || !TryGetPointerDownPosition(out Vector2 screenPosition))
@@ -118,12 +155,34 @@ public class CanvasManager : MonoBehaviour
             upperBlockPanel.anchoredPosition = originalAnchoredPosition;
         }
 
-        ApplyGameStartColors(false);
+        ResetGameStartHover();
     }
 
     private void HandleDragStateChanged(bool isDragging)
     {
         this.isDragging = isDragging;
+        SetPanelPosition(ShouldRaisePanel, true);
+    }
+
+    private void UpdateRequiredBlocksPlacedState()
+    {
+        if (blockManager == null)
+        {
+            return;
+        }
+
+        bool placementComplete = AreRequiredBlocksPlaced;
+        if (wereRequiredBlocksPlaced == placementComplete)
+        {
+            return;
+        }
+
+        wereRequiredBlocksPlaced = placementComplete;
+        if (placementComplete)
+        {
+            isManuallyRaised = false;
+        }
+
         SetPanelPosition(ShouldRaisePanel, true);
     }
 
@@ -146,8 +205,16 @@ public class CanvasManager : MonoBehaviour
         }
 
         panelTween?.Kill();
-        Vector2 targetPosition = originalAnchoredPosition +
-                                 (raisePanel ? Vector2.up * upwardMoveDistance : Vector2.zero);
+        Vector2 targetPosition = originalAnchoredPosition;
+        bool placementComplete = AreRequiredBlocksPlaced;
+        if (raisePanel)
+        {
+            targetPosition.y = upPanelPositionY;
+        }
+        else if (!placementComplete)
+        {
+            targetPosition.y = downPanelPositionY;
+        }
 
         if (!animate || Vector2.SqrMagnitude(upperBlockPanel.anchoredPosition - targetPosition) < 0.01f)
         {
@@ -199,7 +266,7 @@ public class CanvasManager : MonoBehaviour
                            gameStartButton.transform as RectTransform,
                            screenPosition,
                            GetUiCamera(gameStartButton.transform as RectTransform));
-        ApplyGameStartColors(hovered);
+        ApplyGameStartHover(hovered);
     }
 
     private void CacheGameStartColors()
@@ -227,6 +294,100 @@ public class CanvasManager : MonoBehaviour
 
         gameStartButtonImage.color = hovered ? gameStartHoverColor : gameStartNormalColor;
         gameStartButtonText.color = hovered ? gameStartHoverTextColor : gameStartNormalTextColor;
+    }
+
+    private void CacheGameStartScale()
+    {
+        if (!hasGameStartScale && gameStartButton != null)
+        {
+            gameStartNormalScale = gameStartButton.transform.localScale;
+            hasGameStartScale = true;
+        }
+
+        if (!hasGameStartTextScale && gameStartButtonText != null)
+        {
+            gameStartTextNormalScale = gameStartButtonText.transform.localScale;
+            hasGameStartTextScale = true;
+        }
+    }
+
+    private void ApplyGameStartHover(bool hovered)
+    {
+        ApplyGameStartColors(hovered);
+
+        if (!hasGameStartScale ||
+            gameStartButton == null ||
+            isGameStartHovered == hovered)
+        {
+            return;
+        }
+
+        isGameStartHovered = hovered;
+        Vector3 targetScale = gameStartNormalScale;
+        if (hovered)
+        {
+            targetScale.y *= Mathf.Max(1f, gameStartHoverScaleY);
+        }
+
+        gameStartScaleTween?.Kill();
+        gameStartScaleTween = null;
+
+        if (gameStartHoverScaleDuration <= 0f)
+        {
+            gameStartButton.transform.localScale = targetScale;
+            ApplyGameStartTextCounterScale();
+            return;
+        }
+
+        gameStartScaleTween = gameStartButton.transform
+            .DOScale(targetScale, gameStartHoverScaleDuration)
+            .SetEase(gameStartHoverScaleEase)
+            .SetUpdate(useUnscaledTime)
+            .SetLink(gameObject)
+            .OnUpdate(ApplyGameStartTextCounterScale)
+            .OnComplete(() =>
+            {
+                ApplyGameStartTextCounterScale();
+                gameStartScaleTween = null;
+            });
+    }
+
+    private void ApplyGameStartTextCounterScale()
+    {
+        if (!hasGameStartScale ||
+            !hasGameStartTextScale ||
+            gameStartButton == null ||
+            gameStartButtonText == null)
+        {
+            return;
+        }
+
+        float currentButtonScaleY = gameStartButton.transform.localScale.y;
+        float inverseButtonScaleY = Mathf.Approximately(currentButtonScaleY, 0f)
+            ? 1f
+            : gameStartNormalScale.y / currentButtonScaleY;
+
+        Vector3 textScale = gameStartTextNormalScale;
+        textScale.y *= inverseButtonScaleY;
+        gameStartButtonText.transform.localScale = textScale;
+    }
+
+    private void ResetGameStartHover()
+    {
+        gameStartScaleTween?.Kill();
+        gameStartScaleTween = null;
+        isGameStartHovered = false;
+        ApplyGameStartColors(false);
+
+        if (hasGameStartScale && gameStartButton != null)
+        {
+            gameStartButton.transform.localScale = gameStartNormalScale;
+        }
+
+        if (hasGameStartTextScale && gameStartButtonText != null)
+        {
+            gameStartButtonText.transform.localScale = gameStartTextNormalScale;
+        }
     }
 
     private void CacheOriginalPosition()
@@ -309,8 +470,10 @@ public class CanvasManager : MonoBehaviour
 
     private void OnValidate()
     {
-        upwardMoveDistance = Mathf.Max(0f, upwardMoveDistance);
         moveUpDuration = Mathf.Max(0f, moveUpDuration);
         returnDuration = Mathf.Max(0f, returnDuration);
+        gameStartHoverScaleY = Mathf.Max(1f, gameStartHoverScaleY);
+        gameStartHoverScaleDuration = Mathf.Max(0f, gameStartHoverScaleDuration);
+        requiredPlacedBlockCount = Mathf.Max(1, requiredPlacedBlockCount);
     }
 }

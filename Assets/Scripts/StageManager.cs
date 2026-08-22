@@ -51,6 +51,10 @@ public class StageManager : MonoBehaviour
     [Tooltip("画面下から表示するResultBGです。")]
     [SerializeField] private RectTransform resultBackground;
 
+    [Tooltip("ゴールに触れてからResultBGを表示し始めるまでの待機時間（秒）です。")]
+    [Min(0f)]
+    [SerializeField] private float resultDisplayDelay = 0.5f;
+
     [Tooltip("ResultBGが表示されたときの座標です。")]
     [SerializeField] private Vector2 resultShownPosition = Vector2.zero;
 
@@ -62,13 +66,11 @@ public class StageManager : MonoBehaviour
 
     [Header("モード管理")]
     [SerializeField] private BlockManager blockManager;
+    [SerializeField] private CanvasManager canvasManager;
     [SerializeField] private Rigidbody2D playerBody;
     [SerializeField] private GameObject blockBackground;
     [SerializeField] private GameObject gridBackground;
     [SerializeField] private Button gameStartButton;
-
-    [Tooltip("プレイモードからビルドモードへ戻るキーです。")]
-    [SerializeField] private KeyCode returnToBuildKey = KeyCode.R;
 
     [Header("落下リトライ")]
     [Tooltip("プレイ中にプレイヤーのY座標がこの値以下になると、開始位置からリトライします。")]
@@ -104,6 +106,7 @@ public class StageManager : MonoBehaviour
     private Tweener transitionTween;
     private Tweener resultTween;
     private Vector2 resultHiddenPosition;
+    private bool isRetryTransitionPlaying;
 
     private void Awake()
     {
@@ -126,7 +129,16 @@ public class StageManager : MonoBehaviour
         while (!token.IsCancellationRequested)
         {
             bool canceled = await UniTask.WaitUntil(
-                    () => blockManager.AllBlocksPlaced,
+                    () => !isRetryTransitionPlaying,
+                    cancellationToken: token)
+                .SuppressCancellationThrow();
+            if (canceled)
+            {
+                return;
+            }
+
+            canceled = await UniTask.WaitUntil(
+                    AreRequiredBlocksPlaced,
                     cancellationToken: token)
                 .SuppressCancellationThrow();
             if (canceled)
@@ -150,7 +162,7 @@ public class StageManager : MonoBehaviour
             while (CurrentMode == StageMode.Play)
             {
                 canceled = await UniTask.WaitUntil(
-                        () => Input.GetKeyDown(returnToBuildKey) ||
+                        () => CurrentMode != StageMode.Play ||
                               HasPlayerFallen() ||
                               HasReachedGoal(),
                         cancellationToken: token)
@@ -160,9 +172,8 @@ public class StageManager : MonoBehaviour
                     return;
                 }
 
-                if (Input.GetKeyDown(returnToBuildKey))
+                if (CurrentMode != StageMode.Play)
                 {
-                    EnterBuildMode();
                     break;
                 }
 
@@ -184,10 +195,14 @@ public class StageManager : MonoBehaviour
         goalCollider.enabled &&
         playerCollider.Distance(goalCollider).isOverlapped;
 
+    private bool AreRequiredBlocksPlaced() =>
+        canvasManager != null
+            ? canvasManager.AreRequiredBlocksPlaced
+            : blockManager != null && blockManager.AllBlocksPlaced;
+
     private async UniTask EnterResultModeAsync(CancellationToken token)
     {
         CurrentMode = StageMode.Result;
-        SetPlayerEnabled(false);
 
         if (blockManager != null)
         {
@@ -195,6 +210,16 @@ public class StageManager : MonoBehaviour
         }
 
         if (resultBackground == null)
+        {
+            return;
+        }
+
+        bool delayCanceled = await UniTask.Delay(
+                TimeSpan.FromSeconds(resultDisplayDelay),
+                ignoreTimeScale: useUnscaledResultTime,
+                cancellationToken: token)
+            .SuppressCancellationThrow();
+        if (delayCanceled)
         {
             return;
         }
@@ -297,6 +322,55 @@ public class StageManager : MonoBehaviour
         return false;
     }
 
+    private async UniTaskVoid PlayRetryTransitionAsync(CancellationToken token)
+    {
+        try
+        {
+            if (transitionOverlay == null)
+            {
+                EnterBuildMode();
+                return;
+            }
+
+            transitionOverlay.gameObject.SetActive(true);
+            transitionOverlay.SetAsLastSibling();
+            Canvas.ForceUpdateCanvases();
+
+            float height = transitionOverlay.rect.height;
+
+            // 画面下から黒いオーバーレイを入れて、下端から画面を覆います。
+            transitionOverlay.anchoredPosition = Vector2.down * height;
+            if (await MoveTransitionAsync(0f, coverDuration, token))
+            {
+                return;
+            }
+
+            EnterBuildMode();
+
+            bool canceled = await UniTask.Delay(
+                    TimeSpan.FromSeconds(fullCoverDuration),
+                    ignoreTimeScale: useUnscaledTransitionTime,
+                    cancellationToken: token)
+                .SuppressCancellationThrow();
+            if (canceled)
+            {
+                return;
+            }
+
+            // 同じ向きへ通過させ、画面下側からステージを再表示します。
+            if (await MoveTransitionAsync(height, revealDuration, token))
+            {
+                return;
+            }
+
+            ResetTransitionOverlay();
+        }
+        finally
+        {
+            isRetryTransitionPlaying = false;
+        }
+    }
+
     private async UniTask<bool> MoveTransitionAsync(
         float targetY,
         float duration,
@@ -349,6 +423,24 @@ public class StageManager : MonoBehaviour
         SetPlayerEnabled(false);
         ApplyPlayerStartPosition();
         ApplyGoalPosition();
+    }
+
+    /// <summary>
+    /// プレイ中のステージをビルドモードへ戻します。
+    /// </summary>
+    public void ReturnToBuildMode()
+    {
+        if (CurrentMode != StageMode.Play ||
+            isRetryTransitionPlaying ||
+            (transitionOverlay != null && transitionOverlay.gameObject.activeSelf))
+        {
+            return;
+        }
+
+        isRetryTransitionPlaying = true;
+        CurrentMode = StageMode.Build;
+        SetPlayerEnabled(false);
+        PlayRetryTransitionAsync(this.GetCancellationTokenOnDestroy()).Forget();
     }
 
     private void EnterPlayMode()
@@ -453,6 +545,7 @@ public class StageManager : MonoBehaviour
         reservedCellSize.y = Mathf.Max(1, reservedCellSize.y);
         goalReservedCellSize.x = Mathf.Max(1, goalReservedCellSize.x);
         goalReservedCellSize.y = Mathf.Max(1, goalReservedCellSize.y);
+        resultDisplayDelay = Mathf.Max(0f, resultDisplayDelay);
         resultMoveDuration = Mathf.Max(0f, resultMoveDuration);
         coverDuration = Mathf.Max(0f, coverDuration);
         fullCoverDuration = Mathf.Max(0f, fullCoverDuration);
@@ -501,6 +594,11 @@ public class StageManager : MonoBehaviour
             blockManager = FindFirstObjectByType<BlockManager>();
         }
 
+        if (canvasManager == null)
+        {
+            canvasManager = FindFirstObjectByType<CanvasManager>();
+        }
+
         if (playerBody == null && player != null)
         {
             playerBody = player.GetComponent<Rigidbody2D>();
@@ -514,6 +612,11 @@ public class StageManager : MonoBehaviour
         if (goalCollider == null && goal != null)
         {
             goalCollider = goal.GetComponent<Collider2D>();
+        }
+
+        if (goalCollider != null)
+        {
+            goalCollider.isTrigger = true;
         }
 
         blockBackground ??= GameObject.Find("BlockBG");

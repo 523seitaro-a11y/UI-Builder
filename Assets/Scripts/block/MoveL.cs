@@ -39,6 +39,11 @@ public class MoveL : MonoBehaviour, BlockManager.IBlockOperationState
     /// </summary>
     private void OnMouseDown()
     {
+        BeginOperation();
+    }
+
+    public void BeginOperation()
+    {
         if (playerBody == null)
         {
             Debug.LogWarning("MoveL: プレイヤーの Rigidbody2D が設定されていません。", this);
@@ -53,8 +58,7 @@ public class MoveL : MonoBehaviour, BlockManager.IBlockOperationState
     /// </summary>
     private void OnMouseUp()
     {
-        isPressed = false;
-        StopHorizontalMovement();
+        CancelOperation();
     }
 
     private void FixedUpdate()

@@ -43,6 +43,11 @@ public class Jump : MonoBehaviour, BlockManager.IBlockOperationState
     /// </summary>
     private void OnMouseDown()
     {
+        BeginOperation();
+    }
+
+    public void BeginOperation()
+    {
         if (playerBody == null)
         {
             Debug.LogWarning("Jump: プレイヤーの Rigidbody2D が設定されていません。", this);

@@ -13,6 +13,7 @@ public class BlockManager : MonoBehaviour
     public interface IBlockOperationState
     {
         bool IsOperating { get; }
+        void BeginOperation();
         void CancelOperation();
     }
 
@@ -20,6 +21,7 @@ public class BlockManager : MonoBehaviour
 
     public bool IsDragging => activePreview != null;
     public bool IsBuildMode { get; private set; } = true;
+    public int PlacedBlockCount => placedBlocks.Count;
     public bool AllBlocksPlaced
     {
         get
@@ -78,7 +80,9 @@ public class BlockManager : MonoBehaviour
         public SpriteRenderer[] renderers;
         public Color[] baseColors;
         public Material[] baseMaterials;
+        public int[] baseSortingOrders;
         public IBlockOperationState[] operationStates;
+        public SpriteRenderer[] hoverOutlineRenderers;
         public bool isColorInverted;
     }
 
@@ -156,6 +160,20 @@ public class BlockManager : MonoBehaviour
     [Tooltip("色反転に使用するSprite用Shaderです。")]
     [SerializeField] private Shader operationInversionShader;
 
+    [Header("プレイ中のブロックホバー縁取り")]
+    [SerializeField] private bool showPlayModeHoverOutline = true;
+
+    [SerializeField] private Color playModeHoverOutlineColor = Color.white;
+
+    [SerializeField] private Shader playModeHoverOutlineShader;
+
+    [Tooltip("縁取りを元スプライトから外側へずらすワールド座標上の距離です。")]
+    [Min(0f)]
+    [SerializeField] private float playModeHoverOutlineWidth = 0.06f;
+
+    [Tooltip("縁取りのSorting Orderです。ホバー対象本体はこの値より1つ手前に表示されます。")]
+    [SerializeField] private int playModeHoverOutlineSortingOrder = 10;
+
     private readonly HashSet<Vector3Int> occupiedCells = new HashSet<Vector3Int>();
     private readonly List<PlacedBlock> placedBlocks = new List<PlacedBlock>();
     private readonly List<SpriteRenderer> previewRenderers = new List<SpriteRenderer>();
@@ -166,10 +184,24 @@ public class BlockManager : MonoBehaviour
     private readonly List<bool> previewBehaviourStates = new List<bool>();
     private readonly List<SpriteRenderer> gridPreviewRenderers = new List<SpriteRenderer>();
     private readonly List<Color> gridPreviewOriginalColors = new List<Color>();
+    private readonly List<IBlockOperationState> pointerOperationStates = new List<IBlockOperationState>();
 
     private Tile runtimeColliderTile;
     private TilemapCollider2D placementTilemapCollider;
     private Material operationInversionMaterial;
+    private Material playModeHoverOutlineMaterial;
+
+    private static readonly Vector2[] HoverOutlineDirections =
+    {
+        Vector2.right,
+        Vector2.left,
+        Vector2.up,
+        Vector2.down,
+        new Vector2(1f, 1f).normalized,
+        new Vector2(1f, -1f).normalized,
+        new Vector2(-1f, 1f).normalized,
+        new Vector2(-1f, -1f).normalized
+    };
 
     private BlockDefinition activeDefinition;
     private GameObject activePreview;
@@ -213,6 +245,20 @@ public class BlockManager : MonoBehaviour
             };
         }
 
+        if (playModeHoverOutlineShader == null)
+        {
+            playModeHoverOutlineShader = Shader.Find("UIBuilder/SpriteSolidColor");
+        }
+
+        if (playModeHoverOutlineShader != null)
+        {
+            playModeHoverOutlineMaterial = new Material(playModeHoverOutlineShader)
+            {
+                name = "Block Hover Outline",
+                hideFlags = HideFlags.HideAndDontSave
+            };
+        }
+
         if (stageManager == null)
         {
             stageManager = FindFirstObjectByType<StageManager>();
@@ -243,9 +289,11 @@ public class BlockManager : MonoBehaviour
         if (!IsBuildMode)
         {
             UpdateOperationColors();
+            UpdatePlayModeHoverOutline();
             return;
         }
 
+        HideAllPlayModeHoverOutlines();
         UpdateSourceHover(Input.mousePosition, Input.touchCount == 0);
         UpdatePlacedBlockHover(Input.mousePosition, Input.touchCount == 0 && !IsPointerOverUi());
 
@@ -366,6 +414,7 @@ public class BlockManager : MonoBehaviour
         }
 
         ApplyOperationColor(block, false);
+        DestroyPlayModeHoverOutlines(block);
         activePlacedBlock = block;
         block.instance.transform.localScale = block.baseScale;
         placedBlocks.Remove(block);
@@ -411,6 +460,54 @@ public class BlockManager : MonoBehaviour
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// 指定した画面座標に配置済みブロックがあるかを返します。
+    /// </summary>
+    public bool HasPlacedBlockAtScreenPosition(Vector2 screenPosition) =>
+        !IsBuildMode &&
+        placementCamera != null &&
+        placementTilemap != null &&
+        FindPlacedBlock(screenPosition) != null;
+
+    /// <summary>
+    /// 長押し候補中にカーソルへ入った配置済みブロックの動作を開始します。
+    /// </summary>
+    public bool TryBeginPlacedBlockOperation(Vector2 screenPosition)
+    {
+        if (IsBuildMode || placementCamera == null || placementTilemap == null)
+        {
+            return false;
+        }
+
+        PlacedBlock block = FindPlacedBlock(screenPosition);
+        if (block == null)
+        {
+            return false;
+        }
+
+        EndPlacedBlockOperation();
+        foreach (IBlockOperationState state in block.operationStates)
+        {
+            state.BeginOperation();
+            pointerOperationStates.Add(state);
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// MainManagerから開始したブロック動作を終了します。
+    /// </summary>
+    public void EndPlacedBlockOperation()
+    {
+        foreach (IBlockOperationState state in pointerOperationStates)
+        {
+            state.CancelOperation();
+        }
+
+        pointerOperationStates.Clear();
     }
 
     private Vector3 ScreenToWorld(Vector2 screenPosition)
@@ -473,6 +570,7 @@ public class BlockManager : MonoBehaviour
         block.cell = cell;
         block.instance.transform.localScale = block.baseScale;
         placedBlocks.Add(block);
+        CreatePlayModeHoverOutlines(block);
 
         if (!isNew)
         {
@@ -490,6 +588,8 @@ public class BlockManager : MonoBehaviour
 
     public void SetBuildMode(bool isBuildMode)
     {
+        EndPlacedBlockOperation();
+        HideAllPlayModeHoverOutlines();
         IsBuildMode = isBuildMode;
 
         foreach (PlacedBlock block in placedBlocks)
@@ -513,10 +613,12 @@ public class BlockManager : MonoBehaviour
         SpriteRenderer[] renderers = activePreview.GetComponentsInChildren<SpriteRenderer>(true);
         Color[] colors = new Color[renderers.Length];
         Material[] materials = new Material[renderers.Length];
+        int[] sortingOrders = new int[renderers.Length];
         for (int i = 0; i < renderers.Length; i++)
         {
             colors[i] = renderers[i].color;
             materials[i] = renderers[i].sharedMaterial;
+            sortingOrders[i] = renderers[i].sortingOrder;
         }
 
         MonoBehaviour[] behaviours = activePreview.GetComponentsInChildren<MonoBehaviour>(true);
@@ -537,7 +639,9 @@ public class BlockManager : MonoBehaviour
             renderers = renderers,
             baseColors = colors,
             baseMaterials = materials,
-            operationStates = states.ToArray()
+            baseSortingOrders = sortingOrders,
+            operationStates = states.ToArray(),
+            hoverOutlineRenderers = Array.Empty<SpriteRenderer>()
         };
     }
 
@@ -557,6 +661,170 @@ public class BlockManager : MonoBehaviour
 
             ApplyOperationColor(block, invertOperatingBlockColors && isOperating);
         }
+    }
+
+    private void UpdatePlayModeHoverOutline()
+    {
+        bool allowHover = showPlayModeHoverOutline &&
+                          Input.touchCount == 0 &&
+                          !Input.GetMouseButton(0) &&
+                          !IsPointerOverUi();
+        PlacedBlock hoveredBlock = allowHover
+            ? FindPlacedBlock(Input.mousePosition)
+            : null;
+
+        foreach (PlacedBlock block in placedBlocks)
+        {
+            SetPlayModeHoverOutline(
+                block,
+                block == hoveredBlock && !IsBlockOperating(block));
+        }
+    }
+
+    private static bool IsBlockOperating(PlacedBlock block)
+    {
+        foreach (IBlockOperationState state in block.operationStates)
+        {
+            if (state.IsOperating)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void CreatePlayModeHoverOutlines(PlacedBlock block)
+    {
+        DestroyPlayModeHoverOutlines(block);
+        if (!showPlayModeHoverOutline || block.renderers == null)
+        {
+            return;
+        }
+
+        block.hoverOutlineRenderers = new SpriteRenderer[
+            block.renderers.Length * HoverOutlineDirections.Length];
+        for (int i = 0; i < block.renderers.Length; i++)
+        {
+            SpriteRenderer source = block.renderers[i];
+            if (source == null)
+            {
+                continue;
+            }
+
+            for (int directionIndex = 0;
+                 directionIndex < HoverOutlineDirections.Length;
+                 directionIndex++)
+            {
+                int outlineIndex = i * HoverOutlineDirections.Length + directionIndex;
+                GameObject outlineObject =
+                    new GameObject($"{source.name} (Hover Outline {directionIndex + 1})");
+                outlineObject.layer = source.gameObject.layer;
+                SpriteRenderer outline = outlineObject.AddComponent<SpriteRenderer>();
+                outline.sprite = source.sprite;
+                outline.color = playModeHoverOutlineColor;
+                outline.flipX = source.flipX;
+                outline.flipY = source.flipY;
+                outline.drawMode = source.drawMode;
+                outline.size = source.size;
+                outline.maskInteraction = source.maskInteraction;
+                outline.sortingLayerID = source.sortingLayerID;
+                outline.sortingOrder = playModeHoverOutlineSortingOrder;
+                outline.sharedMaterial = playModeHoverOutlineMaterial != null
+                    ? playModeHoverOutlineMaterial
+                    : source.sharedMaterial;
+                outlineObject.SetActive(false);
+                block.hoverOutlineRenderers[outlineIndex] = outline;
+            }
+        }
+    }
+
+    private void SetPlayModeHoverOutline(PlacedBlock block, bool visible)
+    {
+        if (block.hoverOutlineRenderers == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < block.renderers.Length; i++)
+        {
+            SpriteRenderer source = block.renderers[i];
+            if (source != null)
+            {
+                source.sortingOrder = visible
+                    ? playModeHoverOutlineSortingOrder + 1
+                    : block.baseSortingOrders[i];
+            }
+        }
+
+        for (int i = 0; i < block.hoverOutlineRenderers.Length; i++)
+        {
+            SpriteRenderer outline = block.hoverOutlineRenderers[i];
+            int sourceIndex = i / HoverOutlineDirections.Length;
+            int directionIndex = i % HoverOutlineDirections.Length;
+            SpriteRenderer source = sourceIndex < block.renderers.Length
+                ? block.renderers[sourceIndex]
+                : null;
+            if (outline == null || source == null)
+            {
+                continue;
+            }
+
+            if (visible)
+            {
+                Transform outlineTransform = outline.transform;
+                Transform sourceTransform = source.transform;
+                Vector2 offset =
+                    HoverOutlineDirections[directionIndex] * playModeHoverOutlineWidth;
+                outlineTransform.position = sourceTransform.position +
+                                            new Vector3(offset.x, offset.y, 0f);
+                outlineTransform.rotation = sourceTransform.rotation;
+                outlineTransform.localScale = sourceTransform.lossyScale;
+            }
+
+            outline.gameObject.SetActive(
+                visible &&
+                source.enabled &&
+                source.gameObject.activeInHierarchy);
+        }
+    }
+
+    private void HideAllPlayModeHoverOutlines()
+    {
+        foreach (PlacedBlock block in placedBlocks)
+        {
+            SetPlayModeHoverOutline(block, false);
+        }
+    }
+
+    private static void DestroyPlayModeHoverOutlines(PlacedBlock block)
+    {
+        if (block == null || block.hoverOutlineRenderers == null)
+        {
+            return;
+        }
+
+        if (block.baseSortingOrders != null)
+        {
+            for (int i = 0; i < block.renderers.Length; i++)
+            {
+                if (block.renderers[i] != null && i < block.baseSortingOrders.Length)
+                {
+                    block.renderers[i].sortingOrder = block.baseSortingOrders[i];
+                }
+            }
+        }
+
+        foreach (SpriteRenderer outline in block.hoverOutlineRenderers)
+        {
+            if (outline != null)
+            {
+                outline.gameObject.SetActive(false);
+                Destroy(outline.gameObject);
+            }
+        }
+
+        block.hoverOutlineRenderers = Array.Empty<SpriteRenderer>();
     }
 
     private void ApplyOperationColor(PlacedBlock block, bool inverted)
@@ -636,6 +904,7 @@ public class BlockManager : MonoBehaviour
         sourceHoverScaleSpeed = Mathf.Max(0f, sourceHoverScaleSpeed);
         placedHoverScaleMultiplier = Mathf.Max(1f, placedHoverScaleMultiplier);
         placedHoverScaleSpeed = Mathf.Max(0f, placedHoverScaleSpeed);
+        playModeHoverOutlineWidth = Mathf.Max(0f, playModeHoverOutlineWidth);
     }
 
     private void OnDrawGizmosSelected()
@@ -835,6 +1104,11 @@ public class BlockManager : MonoBehaviour
 
     private void OnDestroy()
     {
+        foreach (PlacedBlock block in placedBlocks)
+        {
+            DestroyPlayModeHoverOutlines(block);
+        }
+
         if (runtimeColliderTile != null)
         {
             Destroy(runtimeColliderTile);
@@ -844,10 +1118,18 @@ public class BlockManager : MonoBehaviour
         {
             Destroy(operationInversionMaterial);
         }
+
+        if (playModeHoverOutlineMaterial != null)
+        {
+            Destroy(playModeHoverOutlineMaterial);
+        }
     }
 
     private void OnDisable()
     {
+        EndPlacedBlockOperation();
+        HideAllPlayModeHoverOutlines();
+
         if (activePreview != null)
         {
             if (activePlacedBlock != null)
@@ -875,6 +1157,11 @@ public class BlockManager : MonoBehaviour
         foreach (PlacedBlock block in placedBlocks)
         {
             ApplyOperationColor(block, false);
+
+            foreach (IBlockOperationState state in block.operationStates)
+            {
+                state.CancelOperation();
+            }
 
             if (block.instance != null)
             {
