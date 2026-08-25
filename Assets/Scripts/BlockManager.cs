@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.Tilemaps;
+using UnityEngine.UI;
 
 /// <summary>
 /// 画面上部のブロックをフィールドへドラッグし、Tilemap のセルに沿って配置します。
@@ -67,8 +68,24 @@ public class BlockManager : MonoBehaviour
         [Tooltip("個数を使い切ったとき、画面上部のドラッグ元を非表示にします。")]
         public bool hideSourceWhenExhausted = true;
 
+        [Tooltip("ドラッグ元を構成する表示全体です。未設定ならDrag Sourceだけを表示切替します。")]
+        public GameObject sourceVisualRoot;
+
+        [Tooltip("BGM音量を操作する1×4のスクロールバーブロックとして扱います。")]
+        public bool isBgmScrollBar;
+
+        [Tooltip("BGMScrollBarの背景デザインに使うImageです。")]
+        public Image bgmTrackSource;
+
+        [Tooltip("BGMScrollBarのボタンデザインに使うImageです。")]
+        public Image bgmHandleSource;
+
         [NonSerialized] public int usedCount;
         [NonSerialized] public Vector3 sourceBaseScale;
+        [NonSerialized] public Vector3 sourceBaseLocalPosition;
+        [NonSerialized] public Vector3 sourceVisualCenterLocal;
+        [NonSerialized] public float bgmMaximumVolume;
+        [NonSerialized] public bool isBgmVertical;
     }
 
     private sealed class PlacedBlock
@@ -84,6 +101,16 @@ public class BlockManager : MonoBehaviour
         public IBlockOperationState[] operationStates;
         public SpriteRenderer[] hoverOutlineRenderers;
         public bool isColorInverted;
+        public Transform bgmHandle;
+        public Collider2D bgmHandleCollider;
+        public SpriteRenderer bgmTrackRenderer;
+        public SpriteRenderer bgmTrackRightRenderer;
+        public Color bgmTrackBaseColor;
+        public int bgmTrackBaseSortingLayerId;
+        public int bgmTrackBaseSortingOrder;
+        public float bgmNormalizedValue = 1f;
+        public float bgmMaximumVolume;
+        public bool isBgmVertical;
     }
 
     [Header("必須参照")]
@@ -99,8 +126,25 @@ public class BlockManager : MonoBehaviour
     [Tooltip("プレイヤー開始位置とゴール位置を配置禁止にするためのStageManagerです。")]
     [SerializeField] private StageManager stageManager;
 
+    [Tooltip("BGMScrollBarのハンドル上で追従させるプレイヤーのRigidbody2Dです。未設定ならPlayerから取得します。")]
+    [SerializeField] private Rigidbody2D playerBody;
+
+    [Tooltip("BGMScrollBarのハンドル上面への接地判定に使うプレイヤーColliderです。未設定ならPlayerから取得します。")]
+    [SerializeField] private Collider2D playerCollider;
+
+    [Tooltip("プレイ中にBGMScrollBarのTrackを奥へ配置する基準となるPlayerのSpriteRendererです。")]
+    [SerializeField] private SpriteRenderer playerRenderer;
+
     [Header("配置するブロック")]
     [SerializeField] private BlockDefinition[] blocks = Array.Empty<BlockDefinition>();
+
+    [Header("BGMScrollBar")]
+    [Tooltip("プレイモード中、ハンドル右側にあるTrackの不透明度です。0で完全透明、1で不透明です。")]
+    [Range(0f, 1f)]
+    [SerializeField] private float bgmTrackRightOpacity = 0.25f;
+
+    [Tooltip("BGMScrollBarのTrack全体に使用する色です。右側にはこの色とRight Opacityの両方が適用されます。")]
+    [SerializeField] private Color bgmTrackColor = new Color(0.23137257f, 0.23137257f, 0.23137257f, 1f);
 
     [Header("配置範囲")]
     [Tooltip("配置グリッド左下のTilemapセル座標です。")]
@@ -190,6 +234,13 @@ public class BlockManager : MonoBehaviour
     private TilemapCollider2D placementTilemapCollider;
     private Material operationInversionMaterial;
     private Material playModeHoverOutlineMaterial;
+    private Texture2D runtimeSolidTexture;
+    private Sprite runtimeSolidSprite;
+    private PlacedBlock activeBgmScrollBar;
+    private bool isPlayerAttachedToBgmHandle;
+    private Vector2 playerBgmHandleOffset;
+    private bool hasBgmScrollBarResetVolume;
+    private float bgmScrollBarResetVolume;
 
     private static readonly Vector2[] HoverOutlineDirections =
     {
@@ -264,6 +315,16 @@ public class BlockManager : MonoBehaviour
             stageManager = FindFirstObjectByType<StageManager>();
         }
 
+        FindPlayerPhysicsReferences();
+
+        foreach (BlockDefinition block in blocks)
+        {
+            if (block != null && block.isBgmScrollBar)
+            {
+                PrepareBgmScrollBarDefinition(block);
+            }
+        }
+
         if (hideWorldTemplatesAtRuntime)
         {
             foreach (BlockDefinition block in blocks)
@@ -279,15 +340,23 @@ public class BlockManager : MonoBehaviour
         {
             if (block != null && block.dragSource != null)
             {
-                block.sourceBaseScale = block.dragSource.localScale;
+                Transform sourceTransform = GetSourceTransform(block);
+                block.sourceBaseScale = sourceTransform.localScale;
+                block.sourceBaseLocalPosition = sourceTransform.localPosition;
+                block.sourceVisualCenterLocal = block.sourceVisualRoot != null
+                    ? RectTransformUtility.CalculateRelativeRectTransformBounds(sourceTransform).center
+                    : Vector3.zero;
             }
         }
     }
 
     private void Update()
     {
+        UpdateBgmTrackVisuals(IsBuildMode);
+
         if (!IsBuildMode)
         {
+            UpdateBgmScrollBarInteraction();
             UpdateOperationColors();
             UpdatePlayModeHoverOutline();
             return;
@@ -315,6 +384,11 @@ public class BlockManager : MonoBehaviour
             return;
         }
 
+        if (Input.GetMouseButtonDown(1) && activeDefinition.isBgmScrollBar)
+        {
+            ToggleActiveBgmOrientation();
+        }
+
         UpdatePreview(screenPosition);
 
         if (phase == PointerPhase.Ended)
@@ -326,7 +400,7 @@ public class BlockManager : MonoBehaviour
     private void UpdatePlacedBlockHover(Vector2 screenPosition, bool allowHover)
     {
         PlacedBlock hovered = allowHover && activePreview == null
-            ? FindPlacedBlock(screenPosition)
+            ? FindPlacedBlockForBuildMode(screenPosition)
             : null;
         float interpolation = placedHoverScaleSpeed <= 0f
             ? 1f
@@ -362,17 +436,28 @@ public class BlockManager : MonoBehaviour
             }
 
             bool isHovered = allowHover &&
-                             block.dragSource.gameObject.activeInHierarchy &&
+                             GetSourceObject(block).activeInHierarchy &&
                              RectTransformUtility.RectangleContainsScreenPoint(
                                  block.dragSource,
                                  screenPosition,
                                  GetUiCamera(block.dragSource));
             Vector3 targetScale = block.sourceBaseScale *
                                   (isHovered ? Mathf.Max(1f, sourceHoverScaleMultiplier) : 1f);
-            block.dragSource.localScale = Vector3.Lerp(
-                block.dragSource.localScale,
+            Transform sourceTransform = GetSourceTransform(block);
+            Vector3 nextScale = Vector3.Lerp(
+                sourceTransform.localScale,
                 targetScale,
                 interpolation);
+            sourceTransform.localScale = nextScale;
+
+            if (block.sourceVisualRoot != null)
+            {
+                Vector3 centerCompensation = Vector3.Scale(
+                    block.sourceVisualCenterLocal,
+                    block.sourceBaseScale - nextScale);
+                sourceTransform.localPosition =
+                    block.sourceBaseLocalPosition + centerCompensation;
+            }
         }
     }
 
@@ -396,9 +481,20 @@ public class BlockManager : MonoBehaviour
             preview.name = string.IsNullOrWhiteSpace(block.displayName)
                 ? block.worldTemplate.name
                 : block.displayName;
+            if (block.isBgmScrollBar)
+            {
+                if (!hasBgmScrollBarResetVolume)
+                {
+                    bgmScrollBarResetVolume = AudioManager.CurrentBgmVolume;
+                    hasBgmScrollBarResetVolume = true;
+                }
+
+                block.bgmMaximumVolume = AudioManager.CurrentBgmVolume;
+            }
+
             BeginWorldDrag(block, preview);
 
-            block.dragSource.gameObject.SetActive(false);
+            SetSourceActive(block, false);
             return true;
         }
 
@@ -407,7 +503,7 @@ public class BlockManager : MonoBehaviour
 
     private bool TryBeginPlacedBlockDrag(Vector2 screenPosition)
     {
-        PlacedBlock block = FindPlacedBlock(screenPosition);
+        PlacedBlock block = FindPlacedBlockForBuildMode(screenPosition);
         if (block == null)
         {
             return false;
@@ -417,6 +513,12 @@ public class BlockManager : MonoBehaviour
         DestroyPlayModeHoverOutlines(block);
         activePlacedBlock = block;
         block.instance.transform.localScale = block.baseScale;
+        if (block.definition.isBgmScrollBar)
+        {
+            block.definition.isBgmVertical = block.isBgmVertical;
+            UpdateBgmFootprint(block.definition);
+        }
+
         placedBlocks.Remove(block);
         RemoveOccupiedCells(block.definition, block.cell);
         BeginWorldDrag(block.definition, block.instance);
@@ -430,12 +532,63 @@ public class BlockManager : MonoBehaviour
         activeGridPreview = Instantiate(definition.worldTemplate, placedBlockParent);
         activeGridPreview.name = $"{activePreview.name} (Grid Preview)";
 
+        if (definition.isBgmScrollBar)
+        {
+            ApplyBgmOrientation(activePreview, definition.isBgmVertical);
+            ApplyBgmOrientation(activeGridPreview, definition.isBgmVertical);
+        }
+
         CacheAndDisablePreviewComponents();
         CachePreviewRenderers();
         PrepareGridPreview();
         activePreview.SetActive(true);
         activeGridPreview.SetActive(true);
         DragStateChanged?.Invoke(true);
+    }
+
+    private void ToggleActiveBgmOrientation()
+    {
+        activeDefinition.isBgmVertical = !activeDefinition.isBgmVertical;
+        UpdateBgmFootprint(activeDefinition);
+        ApplyBgmOrientation(activePreview, activeDefinition.isBgmVertical);
+        ApplyBgmOrientation(activeGridPreview, activeDefinition.isBgmVertical);
+    }
+
+    private static void UpdateBgmFootprint(BlockDefinition definition)
+    {
+        definition.footprint = definition.isBgmVertical
+            ? new Vector2Int(1, 4)
+            : new Vector2Int(4, 1);
+    }
+
+    private void ApplyBgmOrientation(GameObject target, bool isVertical)
+    {
+        if (target == null)
+        {
+            return;
+        }
+
+        Transform handle = target.transform.Find("Handle");
+        if (handle != null)
+        {
+            handle.localPosition = isVertical
+                ? new Vector3(0f, 1.5f, -0.01f)
+                : new Vector3(1.5f, 0f, -0.01f);
+            handle.localRotation = Quaternion.identity;
+        }
+
+        SpriteRenderer track = target.transform.Find("Track")?.GetComponent<SpriteRenderer>();
+        if (track != null)
+        {
+            SetBgmTrackSegment(track, -1.9f, 1.9f, 0.6f, bgmTrackColor, isVertical);
+        }
+
+        SpriteRenderer trackRight = target.transform.Find("TrackRight")?.GetComponent<SpriteRenderer>();
+        if (trackRight != null)
+        {
+            SetBgmTrackSegment(trackRight, -1.9f, 1.9f, 0.6f, bgmTrackColor, isVertical);
+            trackRight.gameObject.SetActive(false);
+        }
     }
 
     private PlacedBlock FindPlacedBlock(Vector2 screenPosition)
@@ -460,6 +613,60 @@ public class BlockManager : MonoBehaviour
         }
 
         return null;
+    }
+
+    private PlacedBlock FindPlacedBlockForBuildMode(Vector2 screenPosition)
+    {
+        Vector3 point = ScreenToWorld(screenPosition);
+        for (int i = placedBlocks.Count - 1; i >= 0; i--)
+        {
+            PlacedBlock block = placedBlocks[i];
+            if (block.instance == null)
+            {
+                continue;
+            }
+
+            if (block.definition.isBgmScrollBar && IsPointInsideBlockVisual(block, point))
+            {
+                return block;
+            }
+
+            Collider2D[] colliders = block.instance.GetComponentsInChildren<Collider2D>();
+            foreach (Collider2D collider in colliders)
+            {
+                if (collider.enabled && collider.OverlapPoint(point))
+                {
+                    return block;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static bool IsPointInsideBlockVisual(PlacedBlock block, Vector2 point)
+    {
+        if (block.renderers == null)
+        {
+            return false;
+        }
+
+        foreach (SpriteRenderer renderer in block.renderers)
+        {
+            if (renderer == null || !renderer.enabled || !renderer.gameObject.activeInHierarchy)
+            {
+                continue;
+            }
+
+            Bounds bounds = renderer.bounds;
+            if (point.x >= bounds.min.x && point.x <= bounds.max.x &&
+                point.y >= bounds.min.y && point.y <= bounds.max.y)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -544,13 +751,20 @@ public class BlockManager : MonoBehaviour
         }
         else if (activePlacedBlock != null)
         {
+            if (activeDefinition.isBgmScrollBar)
+            {
+                activeDefinition.isBgmVertical = activePlacedBlock.isBgmVertical;
+                UpdateBgmFootprint(activeDefinition);
+                ApplyBgmOrientation(activePreview, activeDefinition.isBgmVertical);
+            }
+
             PlaceActiveBlock(activePlacedBlock.cell);
         }
         else
         {
             Destroy(activePreview);
             Destroy(activeGridPreview);
-            activeDefinition.dragSource.gameObject.SetActive(true);
+            SetSourceActive(activeDefinition, true);
         }
 
         ClearDragState();
@@ -568,6 +782,7 @@ public class BlockManager : MonoBehaviour
 
         PlacedBlock block = activePlacedBlock ?? CreatePlacedBlock();
         block.cell = cell;
+        block.isBgmVertical = activeDefinition.isBgmScrollBar && activeDefinition.isBgmVertical;
         block.instance.transform.localScale = block.baseScale;
         placedBlocks.Add(block);
         CreatePlayModeHoverOutlines(block);
@@ -582,19 +797,24 @@ public class BlockManager : MonoBehaviour
             activeDefinition.usedCount >= activeDefinition.availableCount &&
             activeDefinition.hideSourceWhenExhausted)
         {
-            activeDefinition.dragSource.gameObject.SetActive(false);
+            SetSourceActive(activeDefinition, false);
         }
     }
 
     public void SetBuildMode(bool isBuildMode)
     {
         EndPlacedBlockOperation();
+        StopBgmHandlePlayerMotion();
+        activeBgmScrollBar = null;
+        isPlayerAttachedToBgmHandle = false;
         HideAllPlayModeHoverOutlines();
         IsBuildMode = isBuildMode;
 
         foreach (PlacedBlock block in placedBlocks)
         {
             ApplyOperationColor(block, false);
+            ApplyBgmTrackVisual(block, isBuildMode);
+            ApplyBgmTrackDepth(block, isBuildMode);
 
             if (!isBuildMode)
             {
@@ -606,6 +826,53 @@ public class BlockManager : MonoBehaviour
                 state.CancelOperation();
             }
         }
+    }
+
+    /// <summary>
+    /// BGMScrollBarで変更した音量とハンドル位置を、配置時の状態へ戻します。
+    /// </summary>
+    public void ResetBgmScrollBarVolume()
+    {
+        if (!hasBgmScrollBarResetVolume)
+        {
+            return;
+        }
+
+        StopBgmHandlePlayerMotion();
+        activeBgmScrollBar = null;
+        isPlayerAttachedToBgmHandle = false;
+
+        foreach (PlacedBlock block in placedBlocks)
+        {
+            if (!block.definition.isBgmScrollBar || block.bgmHandle == null)
+            {
+                continue;
+            }
+
+            Vector2Int footprint = GetValidFootprint(block.definition);
+            bool isVertical = block.isBgmVertical;
+            float cellLength = isVertical
+                ? Mathf.Abs(placementTilemap.layoutGrid.cellSize.y)
+                : Mathf.Abs(placementTilemap.layoutGrid.cellSize.x);
+            int footprintLength = isVertical ? footprint.y : footprint.x;
+            float maximumLocalPosition = Mathf.Max(0f, (footprintLength - 1) * cellLength) * 0.5f;
+
+            Vector3 handlePosition = block.bgmHandle.localPosition;
+            if (isVertical)
+            {
+                handlePosition.y = maximumLocalPosition;
+            }
+            else
+            {
+                handlePosition.x = maximumLocalPosition;
+            }
+
+            block.bgmHandle.localPosition = handlePosition;
+            block.bgmNormalizedValue = 1f;
+            ApplyBgmTrackVisual(block, IsBuildMode);
+        }
+
+        AudioManager.Instance?.SetBgmVolume(bgmScrollBarResetVolume);
     }
 
     private PlacedBlock CreatePlacedBlock()
@@ -631,6 +898,16 @@ public class BlockManager : MonoBehaviour
             }
         }
 
+        Transform bgmHandle = activeDefinition.isBgmScrollBar
+            ? activePreview.transform.Find("Handle")
+            : null;
+        SpriteRenderer bgmTrackRenderer = activeDefinition.isBgmScrollBar
+            ? activePreview.transform.Find("Track")?.GetComponent<SpriteRenderer>()
+            : null;
+        SpriteRenderer bgmTrackRightRenderer = activeDefinition.isBgmScrollBar
+            ? activePreview.transform.Find("TrackRight")?.GetComponent<SpriteRenderer>()
+            : null;
+
         return new PlacedBlock
         {
             instance = activePreview,
@@ -641,8 +918,318 @@ public class BlockManager : MonoBehaviour
             baseMaterials = materials,
             baseSortingOrders = sortingOrders,
             operationStates = states.ToArray(),
-            hoverOutlineRenderers = Array.Empty<SpriteRenderer>()
+            hoverOutlineRenderers = Array.Empty<SpriteRenderer>(),
+            bgmHandle = bgmHandle,
+            bgmHandleCollider = bgmHandle != null ? bgmHandle.GetComponent<Collider2D>() : null,
+            bgmTrackRenderer = bgmTrackRenderer,
+            bgmTrackRightRenderer = bgmTrackRightRenderer,
+            bgmTrackBaseColor = bgmTrackRenderer != null
+                ? bgmTrackRenderer.color
+                : Color.white,
+            bgmTrackBaseSortingLayerId = bgmTrackRenderer != null
+                ? bgmTrackRenderer.sortingLayerID
+                : 0,
+            bgmTrackBaseSortingOrder = bgmTrackRenderer != null
+                ? bgmTrackRenderer.sortingOrder
+                : 0,
+            bgmNormalizedValue = 1f,
+            bgmMaximumVolume = activeDefinition.bgmMaximumVolume,
+            isBgmVertical = activeDefinition.isBgmScrollBar && activeDefinition.isBgmVertical
         };
+    }
+
+    private void UpdateBgmScrollBarInteraction()
+    {
+        if (!TryGetPointerState(out Vector2 screenPosition, out PointerPhase phase))
+        {
+            return;
+        }
+
+        if (phase == PointerPhase.Began)
+        {
+            activeBgmScrollBar = FindBgmScrollBarHandle(screenPosition);
+            isPlayerAttachedToBgmHandle = TryAttachPlayerToBgmHandle(activeBgmScrollBar);
+        }
+
+        if (activeBgmScrollBar != null && phase != PointerPhase.Ended)
+        {
+            SetBgmScrollBarFromScreenPosition(activeBgmScrollBar, screenPosition);
+        }
+
+        if (phase == PointerPhase.Ended)
+        {
+            StopBgmHandlePlayerMotion();
+            activeBgmScrollBar = null;
+            isPlayerAttachedToBgmHandle = false;
+        }
+    }
+
+    private PlacedBlock FindBgmScrollBarHandle(Vector2 screenPosition)
+    {
+        Vector3 point = ScreenToWorld(screenPosition);
+        for (int i = placedBlocks.Count - 1; i >= 0; i--)
+        {
+            PlacedBlock block = placedBlocks[i];
+            if (!block.definition.isBgmScrollBar ||
+                block.bgmHandleCollider == null ||
+                !block.bgmHandleCollider.enabled)
+            {
+                continue;
+            }
+
+            if (block.bgmHandleCollider.OverlapPoint(point))
+            {
+                return block;
+            }
+        }
+
+        return null;
+    }
+
+    private void SetBgmScrollBarFromScreenPosition(PlacedBlock block, Vector2 screenPosition)
+    {
+        if (block.bgmHandle == null || placementTilemap == null)
+        {
+            return;
+        }
+
+        Vector3 pointerWorld = ScreenToWorld(screenPosition);
+        Vector2Int footprint = GetValidFootprint(block.definition);
+        bool isVertical = block.isBgmVertical;
+        float cellLength = isVertical
+            ? Mathf.Abs(placementTilemap.layoutGrid.cellSize.y)
+            : Mathf.Abs(placementTilemap.layoutGrid.cellSize.x);
+        int footprintLength = isVertical ? footprint.y : footprint.x;
+        float travel = Mathf.Max(0f, (footprintLength - 1) * cellLength);
+        float center = isVertical
+            ? block.instance.transform.position.y
+            : block.instance.transform.position.x;
+        float minimum = center - travel * 0.5f;
+        float maximum = center + travel * 0.5f;
+        float handleAxisPosition = Mathf.Clamp(
+            isVertical ? pointerWorld.y : pointerWorld.x,
+            minimum,
+            maximum);
+
+        if (!isPlayerAttachedToBgmHandle)
+        {
+            isPlayerAttachedToBgmHandle = TryAttachPlayerToBgmHandle(block);
+        }
+
+        Vector3 handlePosition = block.bgmHandle.position;
+        if (isVertical)
+        {
+            handlePosition.y = handleAxisPosition;
+        }
+        else
+        {
+            handlePosition.x = handleAxisPosition;
+        }
+
+        block.bgmHandle.position = handlePosition;
+        ApplyBgmTrackVisual(block, false);
+
+        if (isPlayerAttachedToBgmHandle && playerBody != null)
+        {
+            Vector2 playerPosition = playerBody.position;
+            playerPosition = (Vector2)block.bgmHandle.position + playerBgmHandleOffset;
+            playerBody.position = playerPosition;
+            playerBody.WakeUp();
+            playerBody.linearVelocity = Vector2.zero;
+        }
+
+        block.bgmNormalizedValue = travel <= Mathf.Epsilon
+            ? 1f
+            : Mathf.InverseLerp(minimum, maximum, handleAxisPosition);
+
+        AudioManager.Instance?.SetBgmVolume(
+            block.bgmMaximumVolume * block.bgmNormalizedValue);
+    }
+
+    private bool TryAttachPlayerToBgmHandle(PlacedBlock block)
+    {
+        if (block == null || block.bgmHandle == null || block.bgmHandleCollider == null ||
+            playerBody == null || playerCollider == null ||
+            !block.bgmHandleCollider.enabled || !playerCollider.enabled)
+        {
+            return false;
+        }
+
+        Physics2D.SyncTransforms();
+        Bounds handleBounds = block.bgmHandleCollider.bounds;
+        Bounds playerBounds = playerCollider.bounds;
+        const float contactTolerance = 0.2f;
+        bool overlapsHorizontally =
+            playerBounds.max.x > handleBounds.min.x &&
+            playerBounds.min.x < handleBounds.max.x;
+        bool isAboveHandle = playerBounds.center.y > handleBounds.center.y;
+        float verticalGap = playerBounds.min.y - handleBounds.max.y;
+        ColliderDistance2D distance = playerCollider.Distance(block.bgmHandleCollider);
+        bool isInContact = playerCollider.IsTouching(block.bgmHandleCollider) ||
+                           distance.isOverlapped ||
+                           distance.distance <= contactTolerance ||
+                           Mathf.Abs(verticalGap) <= contactTolerance;
+        if (!overlapsHorizontally || !isAboveHandle || !isInContact)
+        {
+            return false;
+        }
+
+        playerBgmHandleOffset = playerBody.position - (Vector2)block.bgmHandle.position;
+        return true;
+    }
+
+    private void StopBgmHandlePlayerMotion()
+    {
+        if (!isPlayerAttachedToBgmHandle || playerBody == null)
+        {
+            return;
+        }
+
+        playerBody.linearVelocity = Vector2.zero;
+    }
+
+    private void FindPlayerPhysicsReferences()
+    {
+        if (playerBody != null && playerCollider != null && playerRenderer != null)
+        {
+            return;
+        }
+
+        GameObject playerObject = playerBody != null
+            ? playerBody.gameObject
+            : playerCollider != null
+                ? playerCollider.gameObject
+                : GameObject.Find("Player");
+        if (playerObject == null)
+        {
+            Player player = FindFirstObjectByType<Player>();
+            playerObject = player != null ? player.gameObject : null;
+        }
+
+        if (playerObject != null)
+        {
+            playerBody ??= playerObject.GetComponent<Rigidbody2D>();
+            playerCollider ??= playerObject.GetComponent<Collider2D>();
+            playerRenderer ??= playerObject.GetComponent<SpriteRenderer>();
+        }
+    }
+
+    private void ApplyBgmTrackDepth(PlacedBlock block, bool isBuildMode)
+    {
+        if (!block.definition.isBgmScrollBar || block.bgmTrackRenderer == null)
+        {
+            return;
+        }
+
+        if (isBuildMode)
+        {
+            block.bgmTrackRenderer.sortingLayerID = block.bgmTrackBaseSortingLayerId;
+            block.bgmTrackRenderer.sortingOrder = block.bgmTrackBaseSortingOrder;
+            if (block.bgmTrackRightRenderer != null)
+            {
+                block.bgmTrackRightRenderer.sortingLayerID = block.bgmTrackBaseSortingLayerId;
+                block.bgmTrackRightRenderer.sortingOrder = block.bgmTrackBaseSortingOrder;
+            }
+            return;
+        }
+
+        if (playerRenderer != null)
+        {
+            block.bgmTrackRenderer.sortingLayerID = playerRenderer.sortingLayerID;
+            block.bgmTrackRenderer.sortingOrder = playerRenderer.sortingOrder - 1;
+            if (block.bgmTrackRightRenderer != null)
+            {
+                block.bgmTrackRightRenderer.sortingLayerID = playerRenderer.sortingLayerID;
+                block.bgmTrackRightRenderer.sortingOrder = playerRenderer.sortingOrder - 1;
+            }
+        }
+        else
+        {
+            block.bgmTrackRenderer.sortingOrder = placedSortingOrder - 1;
+            if (block.bgmTrackRightRenderer != null)
+            {
+                block.bgmTrackRightRenderer.sortingOrder = placedSortingOrder - 1;
+            }
+        }
+    }
+
+    private void UpdateBgmTrackVisuals(bool isBuildMode)
+    {
+        foreach (PlacedBlock block in placedBlocks)
+        {
+            ApplyBgmTrackVisual(block, isBuildMode);
+        }
+    }
+
+    private void ApplyBgmTrackVisual(PlacedBlock block, bool isBuildMode)
+    {
+        if (!block.definition.isBgmScrollBar || block.bgmTrackRenderer == null ||
+            block.bgmTrackRightRenderer == null || block.bgmHandle == null)
+        {
+            return;
+        }
+
+        const float trackMinX = -1.9f;
+        const float trackMaxX = 1.9f;
+        const float trackHeight = 0.6f;
+        bool isVertical = block.isBgmVertical;
+
+        if (isBuildMode)
+        {
+            SetBgmTrackSegment(
+                block.bgmTrackRenderer,
+                trackMinX,
+                trackMaxX,
+                trackHeight,
+                bgmTrackColor,
+                isVertical);
+            block.bgmTrackRightRenderer.gameObject.SetActive(false);
+            return;
+        }
+
+        float splitX = Mathf.Clamp(
+            isVertical ? block.bgmHandle.localPosition.y : block.bgmHandle.localPosition.x,
+            trackMinX,
+            trackMaxX);
+        SetBgmTrackSegment(
+            block.bgmTrackRenderer,
+            trackMinX,
+            splitX,
+            trackHeight,
+            bgmTrackColor,
+            isVertical);
+
+        Color transparentColor = bgmTrackColor;
+        transparentColor.a *= bgmTrackRightOpacity;
+        block.bgmTrackRightRenderer.gameObject.SetActive(true);
+        SetBgmTrackSegment(
+            block.bgmTrackRightRenderer,
+            splitX,
+            trackMaxX,
+            trackHeight,
+            transparentColor,
+            isVertical);
+    }
+
+    private static void SetBgmTrackSegment(
+        SpriteRenderer renderer,
+        float minX,
+        float maxX,
+        float height,
+        Color color,
+        bool isVertical)
+    {
+        float width = Mathf.Max(0f, maxX - minX);
+        float center = (minX + maxX) * 0.5f;
+        Transform segment = renderer.transform;
+        segment.localPosition = isVertical
+            ? new Vector3(0f, center, 0f)
+            : new Vector3(center, 0f, 0f);
+        segment.localRotation = isVertical
+            ? Quaternion.Euler(0f, 0f, 90f)
+            : Quaternion.identity;
+        segment.localScale = new Vector3(width, height, 1f);
+        renderer.color = color;
     }
 
     private void UpdateOperationColors()
@@ -707,7 +1294,7 @@ public class BlockManager : MonoBehaviour
         for (int i = 0; i < block.renderers.Length; i++)
         {
             SpriteRenderer source = block.renderers[i];
-            if (source == null)
+            if (!IsHoverOutlineSource(block, source))
             {
                 continue;
             }
@@ -749,7 +1336,7 @@ public class BlockManager : MonoBehaviour
         for (int i = 0; i < block.renderers.Length; i++)
         {
             SpriteRenderer source = block.renderers[i];
-            if (source != null)
+            if (IsHoverOutlineSource(block, source))
             {
                 source.sortingOrder = visible
                     ? playModeHoverOutlineSortingOrder + 1
@@ -787,6 +1374,17 @@ public class BlockManager : MonoBehaviour
                 source.enabled &&
                 source.gameObject.activeInHierarchy);
         }
+    }
+
+    private static bool IsHoverOutlineSource(PlacedBlock block, SpriteRenderer source)
+    {
+        if (source == null)
+        {
+            return false;
+        }
+
+        return !block.definition.isBgmScrollBar ||
+               (block.bgmHandle != null && source.transform.IsChildOf(block.bgmHandle));
     }
 
     private void HideAllPlayModeHoverOutlines()
@@ -905,6 +1503,7 @@ public class BlockManager : MonoBehaviour
         placedHoverScaleMultiplier = Mathf.Max(1f, placedHoverScaleMultiplier);
         placedHoverScaleSpeed = Mathf.Max(0f, placedHoverScaleSpeed);
         playModeHoverOutlineWidth = Mathf.Max(0f, playModeHoverOutlineWidth);
+        bgmTrackRightOpacity = Mathf.Clamp01(bgmTrackRightOpacity);
     }
 
     private void OnDrawGizmosSelected()
@@ -934,7 +1533,10 @@ public class BlockManager : MonoBehaviour
             {
                 Vector3Int cell = origin + new Vector3Int(x, y, 0);
                 occupiedCells.Add(cell);
-                SetCompositeTile(cell, runtimeColliderTile);
+                if (!definition.isBgmScrollBar)
+                {
+                    SetCompositeTile(cell, runtimeColliderTile);
+                }
             }
         }
 
@@ -951,7 +1553,9 @@ public class BlockManager : MonoBehaviour
                 Vector3Int cell = origin + new Vector3Int(x, y, 0);
                 occupiedCells.Remove(cell);
 
-                if (placementTilemap != null && placementTilemap.GetTile(cell) == runtimeColliderTile)
+                if (!definition.isBgmScrollBar &&
+                    placementTilemap != null &&
+                    placementTilemap.GetTile(cell) == runtimeColliderTile)
                 {
                     SetCompositeTile(cell, null);
                 }
@@ -987,6 +1591,108 @@ public class BlockManager : MonoBehaviour
         return definition != null && definition.dragSource != null && definition.worldTemplate != null &&
                (definition.availableCount < 0 || definition.usedCount < definition.availableCount);
     }
+
+    private void PrepareBgmScrollBarDefinition(BlockDefinition definition)
+    {
+        definition.isBgmVertical = false;
+        UpdateBgmFootprint(definition);
+        definition.bgmMaximumVolume = AudioManager.CurrentBgmVolume;
+        if (definition.worldTemplate != null)
+        {
+            return;
+        }
+
+        EnsureRuntimeSolidSprite();
+
+        GameObject template = new GameObject("BGMScrollBar Template");
+        template.transform.SetParent(placedBlockParent, false);
+
+        GameObject track = new GameObject("Track");
+        track.transform.SetParent(template.transform, false);
+        SpriteRenderer trackRenderer = track.AddComponent<SpriteRenderer>();
+        trackRenderer.sprite = runtimeSolidSprite;
+        trackRenderer.color = bgmTrackColor;
+        track.transform.localScale = new Vector3(3.8f, 0.6f, 1f);
+
+        GameObject trackRight = new GameObject("TrackRight");
+        trackRight.transform.SetParent(template.transform, false);
+        SpriteRenderer trackRightRenderer = trackRight.AddComponent<SpriteRenderer>();
+        trackRightRenderer.sprite = runtimeSolidSprite;
+        trackRightRenderer.color = trackRenderer.color;
+        trackRight.transform.localScale = new Vector3(3.8f, 0.6f, 1f);
+        trackRight.SetActive(false);
+
+        GameObject handle = new GameObject("Handle");
+        handle.transform.SetParent(template.transform, false);
+        handle.transform.localPosition = new Vector3(1.5f, 0f, -0.01f);
+
+        GameObject handleVisual = new GameObject("Visual");
+        handleVisual.transform.SetParent(handle.transform, false);
+        SpriteRenderer handleRenderer = handleVisual.AddComponent<SpriteRenderer>();
+        handleRenderer.sprite = definition.bgmHandleSource != null
+            ? definition.bgmHandleSource.sprite
+            : runtimeSolidSprite;
+        handleRenderer.color = definition.bgmHandleSource != null
+            ? definition.bgmHandleSource.color
+            : Color.white;
+
+        if (handleRenderer.sprite != null)
+        {
+            Vector2 spriteSize = handleRenderer.sprite.bounds.size;
+            Vector3 visualScale = new Vector3(
+                spriteSize.x > Mathf.Epsilon ? 1f / spriteSize.x : 1f,
+                spriteSize.y > Mathf.Epsilon ? 1f / spriteSize.y : 1f,
+                1f);
+            handleVisual.transform.localScale = visualScale;
+            Vector3 spriteCenter = handleRenderer.sprite.bounds.center;
+            handleVisual.transform.localPosition = new Vector3(
+                -spriteCenter.x * visualScale.x,
+                -spriteCenter.y * visualScale.y,
+                0f);
+        }
+
+        BoxCollider2D handleCollider = handle.AddComponent<BoxCollider2D>();
+        handleCollider.size = Vector2.one;
+        handleCollider.isTrigger = false;
+
+        definition.worldTemplate = template;
+        template.SetActive(false);
+    }
+
+    private void EnsureRuntimeSolidSprite()
+    {
+        if (runtimeSolidSprite != null)
+        {
+            return;
+        }
+
+        runtimeSolidTexture = new Texture2D(1, 1, TextureFormat.RGBA32, false)
+        {
+            name = "BGMScrollBar Solid Texture",
+            filterMode = FilterMode.Point,
+            hideFlags = HideFlags.HideAndDontSave
+        };
+        runtimeSolidTexture.SetPixel(0, 0, Color.white);
+        runtimeSolidTexture.Apply();
+        runtimeSolidSprite = Sprite.Create(
+            runtimeSolidTexture,
+            new Rect(0f, 0f, 1f, 1f),
+            new Vector2(0.5f, 0.5f),
+            1f);
+        runtimeSolidSprite.name = "BGMScrollBar Solid Sprite";
+        runtimeSolidSprite.hideFlags = HideFlags.HideAndDontSave;
+    }
+
+    private static GameObject GetSourceObject(BlockDefinition definition) =>
+        definition.sourceVisualRoot != null
+            ? definition.sourceVisualRoot
+            : definition.dragSource.gameObject;
+
+    private static Transform GetSourceTransform(BlockDefinition definition) =>
+        GetSourceObject(definition).transform;
+
+    private static void SetSourceActive(BlockDefinition definition, bool active) =>
+        GetSourceObject(definition).SetActive(active);
 
     private static Camera GetUiCamera(RectTransform source)
     {
@@ -1091,7 +1797,8 @@ public class BlockManager : MonoBehaviour
 
     private void SetPlacedCollidersAsTriggers()
     {
-        if (!mergePlacedBlocksIntoTilemap)
+        // BGMScrollBarはTilemapへ統合せず、ハンドル1セルだけを通常Colliderとして残します。
+        if (!mergePlacedBlocksIntoTilemap || activeDefinition.isBgmScrollBar)
         {
             return;
         }
@@ -1123,11 +1830,24 @@ public class BlockManager : MonoBehaviour
         {
             Destroy(playModeHoverOutlineMaterial);
         }
+
+        if (runtimeSolidSprite != null)
+        {
+            Destroy(runtimeSolidSprite);
+        }
+
+        if (runtimeSolidTexture != null)
+        {
+            Destroy(runtimeSolidTexture);
+        }
     }
 
     private void OnDisable()
     {
         EndPlacedBlockOperation();
+        StopBgmHandlePlayerMotion();
+        activeBgmScrollBar = null;
+        isPlayerAttachedToBgmHandle = false;
         HideAllPlayModeHoverOutlines();
 
         if (activePreview != null)
@@ -1140,7 +1860,7 @@ public class BlockManager : MonoBehaviour
             {
                 Destroy(activePreview);
                 Destroy(activeGridPreview);
-                activeDefinition.dragSource.gameObject.SetActive(true);
+                SetSourceActive(activeDefinition, true);
             }
 
             ClearDragState();
@@ -1150,7 +1870,9 @@ public class BlockManager : MonoBehaviour
         {
             if (block != null && block.dragSource != null && block.sourceBaseScale != Vector3.zero)
             {
-                block.dragSource.localScale = block.sourceBaseScale;
+                Transform sourceTransform = GetSourceTransform(block);
+                sourceTransform.localScale = block.sourceBaseScale;
+                sourceTransform.localPosition = block.sourceBaseLocalPosition;
             }
         }
 

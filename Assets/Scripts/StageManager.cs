@@ -2,7 +2,10 @@ using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using DG.Tweening;
+using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.SceneManagement;
 using UnityEngine.Tilemaps;
 using UnityEngine.UI;
 
@@ -12,8 +15,21 @@ public class StageManager : MonoBehaviour
     {
         Build,
         Play,
+        GoalReached,
         Result
     }
+
+    [Header("ステージ情報")]
+    [Tooltip("HierarchyでStageManagerを選択し、このステージの番号を設定します。")]
+    [Min(1)]
+    [SerializeField] private int stageNumber = 1;
+
+    [Tooltip("ステージシーン名の先頭文字です。番号2なら Stage2 を読み込みます。")]
+    [SerializeField] private string stageSceneNamePrefix = "Stage";
+
+    [SerializeField] private TMP_Text pauseStageText;
+    [SerializeField] private TMP_Text resultStageText;
+    [SerializeField] private Button nextStageButton;
 
     [Header("プレイヤー開始位置")]
     [Tooltip("開始位置へ移動するプレイヤーのTransformです。")]
@@ -41,12 +57,56 @@ public class StageManager : MonoBehaviour
     [Tooltip("ゴールセル中央から実際の位置へ加える補正値です。")]
     [SerializeField] private Vector2 goalOffset;
 
-    [Tooltip("ゴール位置としてブロック配置を禁止するセル数です。Xが横、Yが縦です。")]
-    [SerializeField] private Vector2Int goalReservedCellSize = Vector2Int.one;
+    [Tooltip("ゴール位置としてブロック配置を禁止するセル数です。Xが横、Yが縦です。Yはゴール地点とその1マス上を含むため最低2です。")]
+    [SerializeField] private Vector2Int goalReservedCellSize = new Vector2Int(1, 2);
+
+    [Header("鍵ギミック")]
+    [Tooltip("有効にすると、鍵を取得するまでゴールをロックします。")]
+    [SerializeField] private bool useKeyGimmick;
+
+    [Tooltip("設定した位置へ移動する鍵のTransformです。")]
+    [SerializeField] private Transform key;
+
+    [Tooltip("鍵を配置するTilemapセル座標です。")]
+    [SerializeField] private Vector2Int keyCell = Vector2Int.zero;
+
+    [Tooltip("鍵セル中央から実際の位置へ加える補正値です。")]
+    [SerializeField] private Vector2 keyOffset;
+
+    [Tooltip("鍵位置としてブロック配置を禁止するセル数です。Xが横、Yが縦です。")]
+    [SerializeField] private Vector2Int keyReservedCellSize = Vector2Int.one;
+
+    [Tooltip("プレイヤーとの接触判定に使用する鍵のCollider2Dです。")]
+    [SerializeField] private Collider2D keyCollider;
+
+    [Tooltip("鍵を取得するまでゴールに表示するRock0スプライトです。")]
+    [SerializeField] private Sprite goalLockedSprite;
 
     [Header("ゴール判定とリザルト表示")]
     [SerializeField] private Collider2D playerCollider;
     [SerializeField] private Collider2D goalCollider;
+
+    [Header("クリック式ゴール演出")]
+    [Tooltip("ゴール到達後、フラッグのクリックを待ってからリザルトを表示します。")]
+    [SerializeField] private bool useInteractiveGoalResult;
+
+    [SerializeField] private SpriteRenderer goalSpriteRenderer;
+    [SerializeField] private Sprite goalClearedSprite;
+
+    [Min(0f)]
+    [SerializeField] private float playerAbsorbDuration = 0.45f;
+    [SerializeField] private Ease playerAbsorbEase = Ease.InCubic;
+
+    [Min(1f)]
+    [SerializeField] private float goalPopScale = 1.2f;
+    [Min(0f)]
+    [SerializeField] private float goalPopDuration = 0.25f;
+    [SerializeField] private Ease goalPopEase = Ease.OutCubic;
+    [SerializeField] private bool useUnscaledGoalTime = true;
+
+    [Header("クリック可能時のゴールHover")]
+    [Tooltip("カーソルを合わせている間に表示するGoal1_whiteスプライトです。")]
+    [SerializeField] private Sprite goalHoverSprite;
 
     [Tooltip("画面下から表示するResultBGです。")]
     [SerializeField] private RectTransform resultBackground;
@@ -64,6 +124,25 @@ public class StageManager : MonoBehaviour
     [SerializeField] private Ease resultMoveEase = Ease.OutCubic;
     [SerializeField] private bool useUnscaledResultTime = true;
 
+    [Header("ポーズ表示")]
+    [Tooltip("画面下から表示するPauseBGです。")]
+    [SerializeField] private RectTransform pauseBackground;
+
+    [Tooltip("BlockBGの子にあるPauseButtonです。")]
+    [SerializeField] private Button pauseButton;
+
+    [Tooltip("PauseBGの子にあるBackButtonです。")]
+    [SerializeField] private Button pauseBackButton;
+
+    [Tooltip("PauseBGが表示されたときの座標です。")]
+    [SerializeField] private Vector2 pauseShownPosition = Vector2.zero;
+
+    [Min(0f)]
+    [SerializeField] private float pauseMoveDuration = 0.35f;
+
+    [SerializeField] private Ease pauseMoveEase = Ease.OutCubic;
+    [SerializeField] private bool useUnscaledPauseTime = true;
+
     [Header("モード管理")]
     [SerializeField] private BlockManager blockManager;
     [SerializeField] private CanvasManager canvasManager;
@@ -75,6 +154,10 @@ public class StageManager : MonoBehaviour
     [Header("落下リトライ")]
     [Tooltip("プレイ中にプレイヤーのY座標がこの値以下になると、開始位置からリトライします。")]
     [SerializeField] private float retryHeight = -7f;
+
+    [Header("接触リトライ")]
+    [Tooltip("プレイヤーが触れると開始位置からやり直すTilemapを指定します。複数指定できます。")]
+    [SerializeField] private Tilemap[] retryTilemaps = Array.Empty<Tilemap>();
 
     [Header("ゲーム開始時の画面遷移")]
     [Tooltip("画面全体を覆う黒いUIです。")]
@@ -99,24 +182,151 @@ public class StageManager : MonoBehaviour
     [SerializeField] private Ease transitionEase = Ease.InOutCubic;
     [SerializeField] private bool useUnscaledTransitionTime = true;
 
+    public int StageNumber => stageNumber;
     public Vector2Int PlayerStartCell => playerStartCell;
     public Vector2Int GoalCell => goalCell;
+    public Vector2Int KeyCell => keyCell;
     public StageMode CurrentMode { get; private set; }
+    public bool IsPaused { get; private set; }
 
     private Tweener transitionTween;
     private Tweener resultTween;
+    private Tweener pauseTween;
+    private Collider2D[] retryTilemapColliders = Array.Empty<Collider2D>();
+    private Sequence playerAbsorbTween;
+    private Sequence goalPopTween;
     private Vector2 resultHiddenPosition;
+    private Vector2 pauseHiddenPosition;
+    private Vector3 playerDefaultScale;
+    private Vector3 goalDefaultScale;
+    private Sprite goalDefaultSprite;
+    private bool isKeyCollected;
     private bool isRetryTransitionPlaying;
+    private bool isGoalClickable;
+    private StageMode modeBeforePause;
+    private bool blockManagerWasEnabled;
+    private bool playerWasSimulated;
+    private float timeScaleBeforePause = 1f;
 
     private void Awake()
     {
         FindMissingReferences();
+        CacheRetryTilemapColliders();
+        ApplyStageInformation();
+        ConfigureStageNavigation();
+        ConfigurePlayerLandingPhysics();
+        CacheGoalPresentation();
+
+        ConfigurePauseButtons();
         ResetTransitionOverlay();
         ResetResultBackground();
+        ResetPauseBackground();
         EnterBuildMode();
     }
 
     private void Start() => RunStageAsync(this.GetCancellationTokenOnDestroy()).Forget();
+
+    private void FixedUpdate()
+    {
+        if (CurrentMode == StageMode.Play && !IsPaused && IsPlayerTouchingKey())
+        {
+            CollectKey();
+        }
+    }
+
+    private void ApplyStageInformation()
+    {
+        string label = $"Stage{stageNumber}";
+        if (pauseStageText != null)
+        {
+            pauseStageText.text = label;
+        }
+
+        if (resultStageText != null)
+        {
+            resultStageText.text = label;
+        }
+
+        if (nextStageButton != null)
+        {
+            nextStageButton.interactable = Application.CanStreamedLevelBeLoaded(
+                GetStageSceneName(stageNumber + 1));
+        }
+    }
+
+    private string GetStageSceneName(int number) => $"{stageSceneNamePrefix}{number}";
+
+    private void ConfigureStageNavigation()
+    {
+        nextStageButton?.onClick.RemoveListener(LoadNextStage);
+        nextStageButton?.onClick.AddListener(LoadNextStage);
+    }
+
+    public void LoadNextStage()
+    {
+        string nextSceneName = GetStageSceneName(stageNumber + 1);
+        if (!Application.CanStreamedLevelBeLoaded(nextSceneName))
+        {
+            Debug.LogWarning(
+                $"StageManager: 次のステージ '{nextSceneName}' がBuild Settingsにありません。",
+                this);
+            return;
+        }
+
+        Time.timeScale = 1f;
+        SceneManager.LoadScene(nextSceneName);
+    }
+
+    private void CacheRetryTilemapColliders()
+    {
+        if (retryTilemaps == null || retryTilemaps.Length == 0)
+        {
+            retryTilemapColliders = Array.Empty<Collider2D>();
+            return;
+        }
+
+        retryTilemapColliders = new Collider2D[retryTilemaps.Length];
+
+        for (int i = 0; i < retryTilemaps.Length; i++)
+        {
+            Tilemap retryTilemap = retryTilemaps[i];
+            if (retryTilemap == null)
+            {
+                continue;
+            }
+
+            Collider2D retryCollider = retryTilemap.GetComponent<CompositeCollider2D>();
+            retryCollider ??= retryTilemap.GetComponent<TilemapCollider2D>();
+            retryTilemapColliders[i] = retryCollider;
+        }
+    }
+
+    /// <summary>
+    /// 高速落下時も接触面を通り越さず、描画フレーム間も滑らかに表示します。
+    /// </summary>
+    private void ConfigurePlayerLandingPhysics()
+    {
+        if (playerBody == null)
+        {
+            return;
+        }
+
+        playerBody.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
+        playerBody.interpolation = RigidbodyInterpolation2D.Interpolate;
+    }
+
+    private void Update()
+    {
+        if (!isGoalClickable)
+        {
+            return;
+        }
+
+        bool hovered = Input.touchCount == 0 &&
+                       !IsPointerOverUi() &&
+                       IsPointerOverGoal(Input.mousePosition);
+        SetGoalHoverSprite(hovered);
+    }
 
     private async UniTaskVoid RunStageAsync(CancellationToken token)
     {
@@ -163,8 +373,8 @@ public class StageManager : MonoBehaviour
             {
                 canceled = await UniTask.WaitUntil(
                         () => CurrentMode != StageMode.Play ||
-                              HasPlayerFallen() ||
-                              HasReachedGoal(),
+                              (!IsPaused &&
+                               (HasPlayerFallen() || HasTouchedRetryTilemap() || HasReachedGoal())),
                         cancellationToken: token)
                     .SuppressCancellationThrow();
                 if (canceled)
@@ -179,7 +389,15 @@ public class StageManager : MonoBehaviour
 
                 if (HasReachedGoal())
                 {
-                    await EnterResultModeAsync(token);
+                    if (useInteractiveGoalResult)
+                    {
+                        await PlayInteractiveGoalSequenceAsync(token);
+                    }
+                    else
+                    {
+                        await EnterResultModeAsync(token);
+                    }
+
                     return;
                 }
 
@@ -189,18 +407,164 @@ public class StageManager : MonoBehaviour
     }
 
     private bool HasReachedGoal() =>
+        (!useKeyGimmick || isKeyCollected) &&
         playerCollider != null &&
         goalCollider != null &&
         playerCollider.enabled &&
         goalCollider.enabled &&
         playerCollider.Distance(goalCollider).isOverlapped;
 
+
     private bool AreRequiredBlocksPlaced() =>
         canvasManager != null
             ? canvasManager.AreRequiredBlocksPlaced
             : blockManager != null && blockManager.AllBlocksPlaced;
 
-    private async UniTask EnterResultModeAsync(CancellationToken token)
+    /// <summary>
+    /// 吸い込み、フラッグ変化、クリック待機を順番に実行します。
+    /// </summary>
+    private async UniTask PlayInteractiveGoalSequenceAsync(CancellationToken token)
+    {
+        CurrentMode = StageMode.GoalReached;
+
+        if (blockManager != null)
+        {
+            blockManager.enabled = false;
+        }
+
+        StopPlayerForGoalAnimation();
+        if (await PlayPlayerAbsorbAsync(token))
+        {
+            return;
+        }
+
+        ChangeToClearedGoalSprite();
+        if (await PlayGoalPopAsync(token))
+        {
+            return;
+        }
+
+        SetGoalClickable(true);
+        bool clickWaitCanceled = await UniTask.WaitUntil(
+                WasGoalClicked,
+                cancellationToken: token)
+            .SuppressCancellationThrow();
+        SetGoalClickable(false);
+
+        if (!clickWaitCanceled)
+        {
+            await EnterResultModeAsync(token, skipDelay: true);
+        }
+    }
+
+    private void StopPlayerForGoalAnimation()
+    {
+        if (playerBody != null)
+        {
+            playerBody.linearVelocity = Vector2.zero;
+            playerBody.angularVelocity = 0f;
+            playerBody.simulated = false;
+        }
+
+        if (playerCollider != null)
+        {
+            playerCollider.enabled = false;
+        }
+    }
+
+    /// <returns>キャンセルされた場合はtrue。</returns>
+    private async UniTask<bool> PlayPlayerAbsorbAsync(CancellationToken token)
+    {
+        if (player == null)
+        {
+            return false;
+        }
+
+        Vector3 targetPosition = GetGoalVisualCenter();
+        targetPosition.z = player.position.z;
+
+        playerAbsorbTween?.Kill();
+        playerAbsorbTween = DOTween.Sequence()
+            .Join(player.DOMove(targetPosition, playerAbsorbDuration).SetEase(playerAbsorbEase))
+            .Join(player.DOScale(Vector3.zero, playerAbsorbDuration).SetEase(playerAbsorbEase))
+            .SetUpdate(useUnscaledGoalTime);
+
+        bool canceled = await WaitForTweenAsync(playerAbsorbTween, token);
+        playerAbsorbTween = null;
+        if (!canceled)
+        {
+            player.gameObject.SetActive(false);
+        }
+
+        return canceled;
+    }
+
+    private Vector3 GetGoalVisualCenter()
+    {
+        if (goalSpriteRenderer != null)
+        {
+            return goalSpriteRenderer.bounds.center;
+        }
+
+        return goal != null ? goal.position : Vector3.zero;
+    }
+
+    private void ChangeToClearedGoalSprite()
+    {
+        if (goalSpriteRenderer != null && goalClearedSprite != null)
+        {
+            goalSpriteRenderer.sprite = goalClearedSprite;
+        }
+
+    }
+
+    /// <returns>キャンセルされた場合はtrue。</returns>
+    private async UniTask<bool> PlayGoalPopAsync(CancellationToken token)
+    {
+        if (goal == null)
+        {
+            return false;
+        }
+
+        goalPopTween?.Kill();
+        goal.localScale = goalDefaultScale;
+        goalPopTween = DOTween.Sequence()
+            .Append(goal.DOScale(goalDefaultScale * goalPopScale, goalPopDuration * 0.5f)
+                .SetEase(goalPopEase))
+            .Append(goal.DOScale(goalDefaultScale, goalPopDuration * 0.5f)
+                .SetEase(Ease.InOutSine))
+            .SetUpdate(useUnscaledGoalTime);
+
+        bool canceled = await WaitForTweenAsync(goalPopTween, token);
+        goalPopTween = null;
+        return canceled;
+    }
+
+    private static async UniTask<bool> WaitForTweenAsync(
+        Tween tween,
+        CancellationToken token)
+    {
+        bool canceled = await UniTask.WaitUntil(
+                () => tween == null || !tween.IsActive() || tween.IsComplete(),
+                cancellationToken: token)
+            .SuppressCancellationThrow();
+
+        if (canceled)
+        {
+            tween?.Kill();
+        }
+
+        return canceled;
+    }
+
+    private bool WasGoalClicked() =>
+        Input.GetMouseButtonDown(0) &&
+        !IsPointerOverUi() &&
+        IsPointerOverGoal(Input.mousePosition);
+
+    private async UniTask EnterResultModeAsync(
+        CancellationToken token,
+        bool skipDelay = false)
     {
         CurrentMode = StageMode.Result;
 
@@ -214,15 +578,20 @@ public class StageManager : MonoBehaviour
             return;
         }
 
-        bool delayCanceled = await UniTask.Delay(
-                TimeSpan.FromSeconds(resultDisplayDelay),
-                ignoreTimeScale: useUnscaledResultTime,
-                cancellationToken: token)
-            .SuppressCancellationThrow();
-        if (delayCanceled)
+        if (!skipDelay)
         {
-            return;
+            bool delayCanceled = await UniTask.Delay(
+                    TimeSpan.FromSeconds(resultDisplayDelay),
+                    ignoreTimeScale: useUnscaledResultTime,
+                    cancellationToken: token)
+                .SuppressCancellationThrow();
+            if (delayCanceled)
+            {
+                return;
+            }
         }
+
+        blockManager?.ResetBgmScrollBarVolume();
 
         resultBackground.gameObject.SetActive(true);
         resultBackground.SetAsLastSibling();
@@ -259,6 +628,120 @@ public class StageManager : MonoBehaviour
         resultBackground.gameObject.SetActive(false);
     }
 
+    /// <summary>
+    /// 現在の画面を停止してPauseBGを表示します。
+    /// </summary>
+    public void ShowPause()
+    {
+        if (IsPaused ||
+            CurrentMode == StageMode.GoalReached ||
+            CurrentMode == StageMode.Result ||
+            isRetryTransitionPlaying ||
+            (transitionOverlay != null && transitionOverlay.gameObject.activeSelf))
+        {
+            return;
+        }
+
+        IsPaused = true;
+        modeBeforePause = CurrentMode;
+        timeScaleBeforePause = Time.timeScale;
+
+        if (blockManager != null)
+        {
+            blockManagerWasEnabled = blockManager.enabled;
+            blockManager.enabled = false;
+        }
+
+        if (canvasManager != null)
+        {
+            canvasManager.SetPaused(true);
+        }
+
+        if (playerBody != null)
+        {
+            playerWasSimulated = playerBody.simulated;
+            playerBody.simulated = false;
+        }
+
+        Time.timeScale = 0f;
+
+        if (pauseBackground == null)
+        {
+            return;
+        }
+
+        pauseTween?.Kill();
+        pauseBackground.gameObject.SetActive(true);
+        pauseBackground.SetAsLastSibling();
+        pauseBackground.anchoredPosition = pauseHiddenPosition;
+        pauseTween = pauseBackground
+            .DOAnchorPos(pauseShownPosition, pauseMoveDuration)
+            .SetEase(pauseMoveEase)
+            .SetUpdate(useUnscaledPauseTime)
+            .OnComplete(() => pauseTween = null);
+    }
+
+    /// <summary>
+    /// PauseBGを閉じて、ポーズ前の画面へ戻します。
+    /// </summary>
+    public void HidePause()
+    {
+        if (!IsPaused || pauseTween != null && pauseTween.IsActive())
+        {
+            return;
+        }
+
+        if (pauseBackground == null)
+        {
+            CompletePauseClose();
+            return;
+        }
+
+        pauseTween = pauseBackground
+            .DOAnchorPos(pauseHiddenPosition, pauseMoveDuration)
+            .SetEase(pauseMoveEase)
+            .SetUpdate(useUnscaledPauseTime)
+            .OnComplete(CompletePauseClose);
+    }
+
+    private void CompletePauseClose()
+    {
+        pauseTween = null;
+        pauseBackground?.gameObject.SetActive(false);
+        Time.timeScale = timeScaleBeforePause;
+
+        if (blockManager != null)
+        {
+            blockManager.enabled = blockManagerWasEnabled;
+        }
+
+        if (canvasManager != null)
+        {
+            canvasManager.SetPaused(false);
+        }
+
+        if (playerBody != null && CurrentMode == modeBeforePause)
+        {
+            playerBody.simulated = playerWasSimulated;
+        }
+
+        IsPaused = false;
+    }
+
+    private void ResetPauseBackground()
+    {
+        pauseTween?.Kill();
+        pauseTween = null;
+
+        if (pauseBackground == null)
+        {
+            return;
+        }
+
+        pauseHiddenPosition = pauseBackground.anchoredPosition;
+        pauseBackground.gameObject.SetActive(false);
+    }
+
     private bool HasPlayerFallen()
     {
         if (playerBody != null)
@@ -267,6 +750,28 @@ public class StageManager : MonoBehaviour
         }
 
         return player != null && player.position.y <= retryHeight;
+    }
+
+    private bool HasTouchedRetryTilemap()
+    {
+        if (playerCollider == null || !playerCollider.enabled)
+        {
+            return false;
+        }
+
+        foreach (Collider2D tilemapCollider in retryTilemapColliders)
+        {
+            if (tilemapCollider != null &&
+                tilemapCollider.enabled &&
+                tilemapCollider.gameObject.activeInHierarchy &&
+                (playerCollider.IsTouching(tilemapCollider) ||
+                 playerCollider.Distance(tilemapCollider).isOverlapped))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void RetryPlayer()
@@ -418,11 +923,14 @@ public class StageManager : MonoBehaviour
 
     private void EnterBuildMode()
     {
+        ResetInteractiveGoalPresentation();
+        ResetKeyGimmick();
         CurrentMode = StageMode.Build;
         SetBuildObjects(true);
         SetPlayerEnabled(false);
         ApplyPlayerStartPosition();
         ApplyGoalPosition();
+        ApplyKeyPosition();
     }
 
     /// <summary>
@@ -430,7 +938,8 @@ public class StageManager : MonoBehaviour
     /// </summary>
     public void ReturnToBuildMode()
     {
-        if (CurrentMode != StageMode.Play ||
+        if (IsPaused ||
+            CurrentMode != StageMode.Play ||
             isRetryTransitionPlaying ||
             (transitionOverlay != null && transitionOverlay.gameObject.activeSelf))
         {
@@ -464,6 +973,17 @@ public class StageManager : MonoBehaviour
 
     private void SetPlayerEnabled(bool enabled)
     {
+        if (player != null)
+        {
+            player.gameObject.SetActive(true);
+            player.localScale = playerDefaultScale;
+        }
+
+        if (playerCollider != null)
+        {
+            playerCollider.enabled = true;
+        }
+
         if (playerBody == null)
         {
             return;
@@ -491,7 +1011,7 @@ public class StageManager : MonoBehaviour
     public bool IsGoalCell(Vector3Int cell)
     {
         int width = Mathf.Max(1, goalReservedCellSize.x);
-        int height = Mathf.Max(1, goalReservedCellSize.y);
+        int height = Mathf.Max(2, goalReservedCellSize.y);
 
         return cell.x >= goalCell.x &&
                cell.y >= goalCell.y &&
@@ -499,8 +1019,47 @@ public class StageManager : MonoBehaviour
                cell.y < goalCell.y + height;
     }
 
+    public bool IsKeyCell(Vector3Int cell)
+    {
+        if (!useKeyGimmick)
+        {
+            return false;
+        }
+
+        int width = Mathf.Max(1, keyReservedCellSize.x);
+        int height = Mathf.Max(1, keyReservedCellSize.y);
+
+        return cell.x >= keyCell.x &&
+               cell.y >= keyCell.y &&
+               cell.x < keyCell.x + width &&
+               cell.y < keyCell.y + height;
+    }
+
     public bool IsBlockPlacementReservedCell(Vector3Int cell) =>
-        IsPlayerStartCell(cell) || IsGoalCell(cell);
+        IsPlayerStartCell(cell) || IsGoalCell(cell) || IsKeyCell(cell) || IsRetryTilemapCell(cell);
+
+    private bool IsRetryTilemapCell(Vector3Int cell)
+    {
+        if (retryTilemaps == null || retryTilemaps.Length == 0)
+        {
+            return false;
+        }
+
+        Vector3 worldPosition = stageTilemap != null
+            ? stageTilemap.GetCellCenterWorld(cell)
+            : (Vector3)cell;
+
+        foreach (Tilemap retryTilemap in retryTilemaps)
+        {
+            if (retryTilemap != null &&
+                retryTilemap.HasTile(retryTilemap.WorldToCell(worldPosition)))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     [ContextMenu("プレイヤーを開始位置へ移動")]
     public void ApplyPlayerStartPosition()
@@ -539,18 +1098,184 @@ public class StageManager : MonoBehaviour
         goal.position = position;
     }
 
+    [ContextMenu("鍵を設定位置へ移動")]
+    public void ApplyKeyPosition()
+    {
+        if (key == null || stageTilemap == null)
+        {
+            return;
+        }
+
+        Vector3 position = stageTilemap.GetCellCenterWorld(
+            new Vector3Int(keyCell.x, keyCell.y, 0));
+        position.x += keyOffset.x;
+        position.y += keyOffset.y;
+        position.z = key.position.z;
+        key.position = position;
+    }
+
+    private bool IsPlayerTouchingKey() =>
+        useKeyGimmick &&
+        !isKeyCollected &&
+        key != null &&
+        key.gameObject.activeInHierarchy &&
+        playerCollider != null &&
+        keyCollider != null &&
+        playerCollider.enabled &&
+        keyCollider.enabled &&
+        playerCollider.Distance(keyCollider).isOverlapped;
+
+    private void CollectKey()
+    {
+        isKeyCollected = true;
+        if (key != null)
+        {
+            key.gameObject.SetActive(false);
+        }
+
+        RefreshGoalLockPresentation();
+    }
+
+    private void ResetKeyGimmick()
+    {
+        isKeyCollected = !useKeyGimmick;
+        if (key != null)
+        {
+            key.gameObject.SetActive(useKeyGimmick);
+        }
+
+        if (keyCollider != null)
+        {
+            keyCollider.enabled = useKeyGimmick;
+        }
+
+        RefreshGoalLockPresentation();
+    }
+
+    private void RefreshGoalLockPresentation()
+    {
+        if (goalSpriteRenderer == null)
+        {
+            return;
+        }
+
+        goalSpriteRenderer.sprite = useKeyGimmick && !isKeyCollected && goalLockedSprite != null
+            ? goalLockedSprite
+            : goalDefaultSprite;
+    }
+
+    private void CacheGoalPresentation()
+    {
+        playerDefaultScale = player != null ? player.localScale : Vector3.one;
+        goalDefaultScale = goal != null ? goal.localScale : Vector3.one;
+        goalDefaultSprite = goalSpriteRenderer != null ? goalSpriteRenderer.sprite : null;
+    }
+
+    private void ResetInteractiveGoalPresentation()
+    {
+        SetGoalClickable(false);
+        playerAbsorbTween?.Kill();
+        playerAbsorbTween = null;
+        goalPopTween?.Kill();
+        goalPopTween = null;
+
+        if (player != null)
+        {
+            player.gameObject.SetActive(true);
+            player.localScale = playerDefaultScale;
+        }
+
+        if (playerCollider != null)
+        {
+            playerCollider.enabled = true;
+        }
+
+        if (goal != null)
+        {
+            goal.localScale = goalDefaultScale;
+        }
+
+        if (goalSpriteRenderer != null)
+        {
+            RefreshGoalLockPresentation();
+        }
+    }
+
+    private void SetGoalClickable(bool clickable)
+    {
+        isGoalClickable = clickable;
+        if (!clickable)
+        {
+            SetGoalHoverSprite(false);
+        }
+    }
+
+    private bool IsPointerOverGoal(Vector2 screenPosition)
+    {
+        if (!isGoalClickable || goalSpriteRenderer == null)
+        {
+            return false;
+        }
+
+        Camera worldCamera = Camera.main;
+        if (worldCamera == null)
+        {
+            return false;
+        }
+
+        float depth = Mathf.Abs(
+            worldCamera.transform.position.z - goalSpriteRenderer.transform.position.z);
+        Vector3 worldPosition = worldCamera.ScreenToWorldPoint(
+            new Vector3(screenPosition.x, screenPosition.y, depth));
+        worldPosition.z = goalSpriteRenderer.bounds.center.z;
+        return goalSpriteRenderer.bounds.Contains(worldPosition);
+    }
+
+    private static bool IsPointerOverUi() =>
+        EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
+
+    private void SetGoalHoverSprite(bool hovered)
+    {
+        if (goalSpriteRenderer == null)
+        {
+            return;
+        }
+
+        Sprite targetSprite = hovered && goalHoverSprite != null
+            ? goalHoverSprite
+            : goalClearedSprite;
+        if (targetSprite != null)
+        {
+            goalSpriteRenderer.sprite = targetSprite;
+        }
+    }
+
     private void OnValidate()
     {
+        stageNumber = Mathf.Max(1, stageNumber);
+        if (string.IsNullOrWhiteSpace(stageSceneNamePrefix))
+        {
+            stageSceneNamePrefix = "Stage";
+        }
+
         reservedCellSize.x = Mathf.Max(1, reservedCellSize.x);
         reservedCellSize.y = Mathf.Max(1, reservedCellSize.y);
         goalReservedCellSize.x = Mathf.Max(1, goalReservedCellSize.x);
-        goalReservedCellSize.y = Mathf.Max(1, goalReservedCellSize.y);
+        goalReservedCellSize.y = Mathf.Max(2, goalReservedCellSize.y);
+        keyReservedCellSize.x = Mathf.Max(1, keyReservedCellSize.x);
+        keyReservedCellSize.y = Mathf.Max(1, keyReservedCellSize.y);
+        playerAbsorbDuration = Mathf.Max(0f, playerAbsorbDuration);
+        goalPopScale = Mathf.Max(1f, goalPopScale);
+        goalPopDuration = Mathf.Max(0f, goalPopDuration);
         resultDisplayDelay = Mathf.Max(0f, resultDisplayDelay);
         resultMoveDuration = Mathf.Max(0f, resultMoveDuration);
+        pauseMoveDuration = Mathf.Max(0f, pauseMoveDuration);
         coverDuration = Mathf.Max(0f, coverDuration);
         fullCoverDuration = Mathf.Max(0f, fullCoverDuration);
         revealDuration = Mathf.Max(0f, revealDuration);
         FindMissingReferences();
+        CacheRetryTilemapColliders();
+        ApplyStageInformation();
 
         if (!Application.isPlaying)
         {
@@ -561,6 +1286,7 @@ public class StageManager : MonoBehaviour
 
             ApplyPlayerStartPosition();
             ApplyGoalPosition();
+            ApplyKeyPosition();
         }
     }
 
@@ -581,6 +1307,15 @@ public class StageManager : MonoBehaviour
             if (goalObject != null)
             {
                 goal = goalObject.transform;
+            }
+        }
+
+        if (key == null)
+        {
+            GameObject keyObject = GameObject.Find("Key");
+            if (keyObject != null)
+            {
+                key = keyObject.transform;
             }
         }
 
@@ -614,10 +1349,26 @@ public class StageManager : MonoBehaviour
             goalCollider = goal.GetComponent<Collider2D>();
         }
 
+        if (goalSpriteRenderer == null && goal != null)
+        {
+            goalSpriteRenderer = goal.GetComponent<SpriteRenderer>();
+        }
+
+        if (keyCollider == null && key != null)
+        {
+            keyCollider = key.GetComponent<Collider2D>();
+        }
+
         if (goalCollider != null)
         {
             goalCollider.isTrigger = true;
         }
+
+        if (keyCollider != null)
+        {
+            keyCollider.isTrigger = true;
+        }
+
 
         blockBackground ??= GameObject.Find("BlockBG");
         gridBackground ??= GameObject.Find("GridBG");
@@ -648,23 +1399,124 @@ public class StageManager : MonoBehaviour
 
         if (resultBackground == null)
         {
-            foreach (RectTransform rectTransform in FindObjectsByType<RectTransform>(
-                         FindObjectsInactive.Include,
-                         FindObjectsSortMode.None))
+            resultBackground = FindRectTransformByName("ResultBG");
+        }
+
+        if (pauseBackground == null)
+        {
+            pauseBackground = FindRectTransformByName("PauseBG");
+        }
+
+        if (pauseStageText == null && pauseBackground != null)
+        {
+            pauseStageText = FindTextByName(pauseBackground, "Stage");
+        }
+
+        if (resultStageText == null && resultBackground != null)
+        {
+            resultStageText = FindTextByName(resultBackground, "Stage");
+        }
+
+        if (nextStageButton == null)
+        {
+            nextStageButton = FindButtonByName("NextButton");
+        }
+
+        if (pauseButton == null)
+        {
+            pauseButton = EnsureButton(FindRectTransformByName("PauseButton"));
+        }
+
+        if (pauseBackButton == null)
+        {
+            pauseBackButton = EnsureButton(FindRectTransformByName("BackButton"));
+        }
+    }
+
+    private static RectTransform FindRectTransformByName(string objectName)
+    {
+        foreach (RectTransform rectTransform in FindObjectsByType<RectTransform>(
+                     FindObjectsInactive.Include,
+                     FindObjectsSortMode.None))
+        {
+            if (rectTransform.name == objectName)
             {
-                if (rectTransform.name == "ResultBG")
-                {
-                    resultBackground = rectTransform;
-                    break;
-                }
+                return rectTransform;
             }
         }
+
+        return null;
+    }
+
+    private static TMP_Text FindTextByName(RectTransform parent, string objectName)
+    {
+        foreach (TMP_Text text in parent.GetComponentsInChildren<TMP_Text>(true))
+        {
+            if (text.name == objectName)
+            {
+                return text;
+            }
+        }
+
+        return null;
+    }
+
+    private static Button FindButtonByName(string objectName)
+    {
+        foreach (Button button in FindObjectsByType<Button>(
+                     FindObjectsInactive.Include,
+                     FindObjectsSortMode.None))
+        {
+            if (button.name == objectName)
+            {
+                return button;
+            }
+        }
+
+        return null;
+    }
+
+    private static Button EnsureButton(RectTransform rectTransform)
+    {
+        if (rectTransform == null)
+        {
+            return null;
+        }
+
+        Button button = rectTransform.GetComponent<Button>();
+        if (button == null && Application.isPlaying)
+        {
+            button = rectTransform.gameObject.AddComponent<Button>();
+            button.targetGraphic = rectTransform.GetComponent<Graphic>();
+        }
+
+        return button;
+    }
+
+    private void ConfigurePauseButtons()
+    {
+        pauseButton?.onClick.RemoveListener(ShowPause);
+        pauseButton?.onClick.AddListener(ShowPause);
+        pauseBackButton?.onClick.RemoveListener(HidePause);
+        pauseBackButton?.onClick.AddListener(HidePause);
     }
 
     private void OnDestroy()
     {
+        pauseButton?.onClick.RemoveListener(ShowPause);
+        pauseBackButton?.onClick.RemoveListener(HidePause);
+        nextStageButton?.onClick.RemoveListener(LoadNextStage);
         transitionTween?.Kill();
         resultTween?.Kill();
+        pauseTween?.Kill();
+        playerAbsorbTween?.Kill();
+        goalPopTween?.Kill();
+
+        if (IsPaused)
+        {
+            canvasManager?.SetPaused(false);
+            Time.timeScale = timeScaleBeforePause;
+        }
     }
 
     private void OnDrawGizmosSelected()
@@ -688,13 +1540,27 @@ public class StageManager : MonoBehaviour
         Vector3Int goalMinCell = new Vector3Int(goalCell.x, goalCell.y, 0);
         Vector3Int goalMaxCell = goalMinCell + new Vector3Int(
             Mathf.Max(1, goalReservedCellSize.x),
-            Mathf.Max(1, goalReservedCellSize.y),
+            Mathf.Max(2, goalReservedCellSize.y),
             0);
         Vector3 goalMin = stageTilemap.CellToWorld(goalMinCell);
         Vector3 goalMax = stageTilemap.CellToWorld(goalMaxCell);
 
         Gizmos.color = new Color(0.3f, 1f, 0.4f, 0.9f);
         Gizmos.DrawWireCube((goalMin + goalMax) * 0.5f, goalMax - goalMin);
+
+        if (useKeyGimmick)
+        {
+            Vector3Int keyMinCell = new Vector3Int(keyCell.x, keyCell.y, 0);
+            Vector3Int keyMaxCell = keyMinCell + new Vector3Int(
+                Mathf.Max(1, keyReservedCellSize.x),
+                Mathf.Max(1, keyReservedCellSize.y),
+                0);
+            Vector3 keyMin = stageTilemap.CellToWorld(keyMinCell);
+            Vector3 keyMax = stageTilemap.CellToWorld(keyMaxCell);
+
+            Gizmos.color = new Color(0.2f, 0.8f, 1f, 0.9f);
+            Gizmos.DrawWireCube((keyMin + keyMax) * 0.5f, keyMax - keyMin);
+        }
 
         Gizmos.color = new Color(1f, 0.2f, 0.2f, 0.9f);
         Gizmos.DrawLine(

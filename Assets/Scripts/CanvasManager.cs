@@ -91,6 +91,7 @@ public class CanvasManager : MonoBehaviour
     private bool hasGameStartTextScale;
     private bool isGameStartHovered;
     private Tweener gameStartScaleTween;
+    private bool isPaused;
 
     private void Awake()
     {
@@ -123,6 +124,11 @@ public class CanvasManager : MonoBehaviour
 
     private void Update()
     {
+        if (isPaused)
+        {
+            return;
+        }
+
         UpdateRequiredBlocksPlacedState();
         UpdateGameStartButtonHover(Input.mousePosition, Input.touchCount == 0);
 
@@ -161,6 +167,12 @@ public class CanvasManager : MonoBehaviour
     private void HandleDragStateChanged(bool isDragging)
     {
         this.isDragging = isDragging;
+
+        if (isPaused)
+        {
+            return;
+        }
+
         SetPanelPosition(ShouldRaisePanel, true);
     }
 
@@ -193,6 +205,19 @@ public class CanvasManager : MonoBehaviour
     {
         isManuallyRaised = !isManuallyRaised;
         SetPanelPosition(ShouldRaisePanel, true);
+    }
+
+    /// <summary>
+    /// 現在のパネル位置を維持したまま、CanvasManagerの入力処理だけを停止します。
+    /// </summary>
+    public void SetPaused(bool paused)
+    {
+        isPaused = paused;
+
+        if (paused)
+        {
+            ResetGameStartHover();
+        }
     }
 
     private bool ShouldRaisePanel => isDragging || isManuallyRaised;
