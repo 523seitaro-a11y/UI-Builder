@@ -18,6 +18,12 @@ public class MoveL : MonoBehaviour, BlockManager.IBlockOperationState
     // スプライトが押されている間だけ true になります。
     private bool isPressed;
 
+    public void Configure(Rigidbody2D targetPlayerBody, float speed)
+    {
+        playerBody = targetPlayerBody;
+        moveSpeed = Mathf.Max(0f, speed);
+    }
+
     // 接触中の壁を調べるための配列です。毎フレームのメモリ確保を防ぐため再利用します。
     private readonly ContactPoint2D[] contactPoints = new ContactPoint2D[8];
 

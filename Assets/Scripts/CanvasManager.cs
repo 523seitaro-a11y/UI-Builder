@@ -113,10 +113,6 @@ public class CanvasManager : MonoBehaviour
             blockManager.DragStateChanged += HandleDragStateChanged;
             isDragging = blockManager.IsDragging;
             wereRequiredBlocksPlaced = AreRequiredBlocksPlaced;
-            if (wereRequiredBlocksPlaced)
-            {
-                isManuallyRaised = false;
-            }
 
             SetPanelPosition(ShouldRaisePanel, false);
         }
@@ -190,11 +186,6 @@ public class CanvasManager : MonoBehaviour
         }
 
         wereRequiredBlocksPlaced = placementComplete;
-        if (placementComplete)
-        {
-            isManuallyRaised = false;
-        }
-
         SetPanelPosition(ShouldRaisePanel, true);
     }
 

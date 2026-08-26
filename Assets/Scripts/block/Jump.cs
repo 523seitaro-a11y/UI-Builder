@@ -25,6 +25,12 @@ public class Jump : MonoBehaviour, BlockManager.IBlockOperationState
     private readonly ContactPoint2D[] contacts = new ContactPoint2D[8];
     private bool isJumping;
 
+    public void Configure(Rigidbody2D targetPlayerBody, float power)
+    {
+        playerBody = targetPlayerBody;
+        jumpPower = Mathf.Max(0f, power);
+    }
+
     private void Awake()
     {
         // Inspectorで未設定の場合は、名前が「Player」のオブジェクトから自動取得します。

@@ -1273,7 +1273,7 @@ public class StageManager : MonoBehaviour
         coverDuration = Mathf.Max(0f, coverDuration);
         fullCoverDuration = Mathf.Max(0f, fullCoverDuration);
         revealDuration = Mathf.Max(0f, revealDuration);
-        FindMissingReferences();
+        FindMissingReferences(false);
         CacheRetryTilemapColliders();
         ApplyStageInformation();
 
@@ -1290,7 +1290,7 @@ public class StageManager : MonoBehaviour
         }
     }
 
-    private void FindMissingReferences()
+    private void FindMissingReferences(bool allowComponentCreation = true)
     {
         if (player == null)
         {
@@ -1424,12 +1424,12 @@ public class StageManager : MonoBehaviour
 
         if (pauseButton == null)
         {
-            pauseButton = EnsureButton(FindRectTransformByName("PauseButton"));
+            pauseButton = EnsureButton(FindRectTransformByName("PauseButton"), allowComponentCreation);
         }
 
         if (pauseBackButton == null)
         {
-            pauseBackButton = EnsureButton(FindRectTransformByName("BackButton"));
+            pauseBackButton = EnsureButton(FindRectTransformByName("BackButton"), allowComponentCreation);
         }
     }
 
@@ -1476,7 +1476,7 @@ public class StageManager : MonoBehaviour
         return null;
     }
 
-    private static Button EnsureButton(RectTransform rectTransform)
+    private static Button EnsureButton(RectTransform rectTransform, bool allowComponentCreation)
     {
         if (rectTransform == null)
         {
@@ -1484,7 +1484,7 @@ public class StageManager : MonoBehaviour
         }
 
         Button button = rectTransform.GetComponent<Button>();
-        if (button == null && Application.isPlaying)
+        if (button == null && allowComponentCreation && Application.isPlaying)
         {
             button = rectTransform.gameObject.AddComponent<Button>();
             button.targetGraphic = rectTransform.GetComponent<Graphic>();

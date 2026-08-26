@@ -27,20 +27,22 @@ public class BlockManager : MonoBehaviour
     {
         get
         {
-            if (blocks.Length == 0)
-            {
-                return false;
-            }
-
+            bool hasEnabledBlock = false;
             foreach (BlockDefinition block in blocks)
             {
-                if (block == null || block.availableCount < 0 || block.usedCount < block.availableCount)
+                if (block == null || !block.isEnabled || block.dragSource == null)
+                {
+                    continue;
+                }
+
+                hasEnabledBlock = true;
+                if (block.availableCount < 0 || block.usedCount < block.availableCount)
                 {
                     return false;
                 }
             }
 
-            return true;
+            return hasEnabledBlock;
         }
     }
 
@@ -49,6 +51,9 @@ public class BlockManager : MonoBehaviour
     {
         [Tooltip("Inspector上で識別するための名前です。")]
         public string displayName;
+
+        [HideInInspector]
+        public bool isEnabled = true;
 
         [Tooltip("画面上部に表示されているドラッグ元のRectTransformです。")]
         public RectTransform dragSource;
@@ -73,6 +78,12 @@ public class BlockManager : MonoBehaviour
 
         [Tooltip("BGM音量を操作する1×4のスクロールバーブロックとして扱います。")]
         public bool isBgmScrollBar;
+
+        [Tooltip("worldTemplate未設定のMoveR/MoveLを自動生成するときの移動速度です。")]
+        [Min(0f)] public float moveSpeed = 5f;
+
+        [Tooltip("worldTemplate未設定のJumpを自動生成するときのジャンプ力です。")]
+        [Min(0f)] public float jumpPower = 15f;
 
         [Tooltip("BGMScrollBarの背景デザインに使うImageです。")]
         public Image bgmTrackSource;
@@ -140,6 +151,8 @@ public class BlockManager : MonoBehaviour
 
     [Header("配置するブロック")]
     [SerializeField] private BlockDefinition[] blocks = Array.Empty<BlockDefinition>();
+
+    [SerializeField, HideInInspector] private int blockAvailabilityVersion;
 
     [Header("BGMScrollBar")]
     [Tooltip("プレイモード中、ハンドル右側にあるTrackの不透明度です。0で完全透明、1で不透明です。")]
@@ -325,9 +338,29 @@ public class BlockManager : MonoBehaviour
 
         foreach (BlockDefinition block in blocks)
         {
-            if (block != null && block.isBgmScrollBar)
+            if (block == null)
+            {
+                continue;
+            }
+
+            bool isEnabled = block.isEnabled && block.dragSource != null;
+            if (block.dragSource != null)
+            {
+                SetSourceActive(block, isEnabled);
+            }
+
+            if (!isEnabled)
+            {
+                continue;
+            }
+
+            if (block.isBgmScrollBar)
             {
                 PrepareBgmScrollBarDefinition(block);
+            }
+            else
+            {
+                PrepareBuiltInBlockDefinition(block);
             }
         }
 
@@ -344,7 +377,7 @@ public class BlockManager : MonoBehaviour
 
         foreach (BlockDefinition block in blocks)
         {
-            if (block != null && block.dragSource != null)
+            if (block != null && block.isEnabled && block.dragSource != null)
             {
                 Transform sourceTransform = GetSourceTransform(block);
                 block.sourceBaseScale = sourceTransform.localScale;
@@ -436,7 +469,7 @@ public class BlockManager : MonoBehaviour
 
         foreach (BlockDefinition block in blocks)
         {
-            if (block == null || block.dragSource == null)
+            if (block == null || !block.isEnabled || block.dragSource == null)
             {
                 continue;
             }
@@ -1529,6 +1562,18 @@ public class BlockManager : MonoBehaviour
 
     private void OnValidate()
     {
+        if (blockAvailabilityVersion < 1)
+        {
+            foreach (BlockDefinition block in blocks)
+            {
+                if (block != null)
+                {
+                    block.isEnabled = block.dragSource != null;
+                }
+            }
+
+            blockAvailabilityVersion = 1;
+        }
         placementGridSize.x = Mathf.Max(1, placementGridSize.x);
         placementGridSize.y = Mathf.Max(1, placementGridSize.y);
         sourceHoverScaleMultiplier = Mathf.Max(1f, sourceHoverScaleMultiplier);
@@ -1621,7 +1666,7 @@ public class BlockManager : MonoBehaviour
 
     private static bool CanCreate(BlockDefinition definition)
     {
-        return definition != null && definition.dragSource != null && definition.worldTemplate != null &&
+        return definition != null && definition.isEnabled && definition.dragSource != null && definition.worldTemplate != null &&
                (definition.availableCount < 0 || definition.usedCount < definition.availableCount);
     }
 
@@ -1630,7 +1675,12 @@ public class BlockManager : MonoBehaviour
 
     private void SetRotationDragPopVisible(bool visible)
     {
-        rotationDragPop?.SetActive(visible);
+        // Do not use ?. here: it only checks the managed reference and does not
+        // recognize UnityEngine.Object instances that have already been destroyed.
+        if (rotationDragPop != null)
+        {
+            rotationDragPop.SetActive(visible);
+        }
     }
 
     private void PrepareBgmScrollBarDefinition(BlockDefinition definition)
@@ -1698,6 +1748,83 @@ public class BlockManager : MonoBehaviour
 
         definition.worldTemplate = template;
         template.SetActive(false);
+    }
+
+    private void PrepareBuiltInBlockDefinition(BlockDefinition definition)
+    {
+        if (definition.worldTemplate != null || definition.dragSource == null)
+        {
+            return;
+        }
+
+        string blockName = string.IsNullOrWhiteSpace(definition.displayName)
+            ? definition.dragSource.name
+            : definition.displayName;
+        bool isMoveRight = string.Equals(blockName, "MoveR", StringComparison.OrdinalIgnoreCase);
+        bool isMoveLeft = string.Equals(blockName, "MoveL", StringComparison.OrdinalIgnoreCase);
+        bool isJump = string.Equals(blockName, "Jump", StringComparison.OrdinalIgnoreCase);
+        if (!isMoveRight && !isMoveLeft && !isJump)
+        {
+            return;
+        }
+
+        EnsureRuntimeSolidSprite();
+
+        GameObject template = new GameObject($"{blockName} Template");
+        template.transform.SetParent(placedBlockParent, false);
+        template.SetActive(false);
+
+        Vector2Int footprint = GetValidFootprint(definition);
+        BoxCollider2D collider = template.AddComponent<BoxCollider2D>();
+        collider.size = new Vector2(footprint.x, footprint.y);
+        collider.isTrigger = false;
+
+        GameObject visual = new GameObject("Visual");
+        visual.transform.SetParent(template.transform, false);
+        SpriteRenderer renderer = visual.AddComponent<SpriteRenderer>();
+        Image sourceImage = definition.dragSource.GetComponent<Image>();
+        if (sourceImage == null)
+        {
+            sourceImage = definition.dragSource.GetComponentInChildren<Image>(true);
+        }
+
+        renderer.sprite = sourceImage != null && sourceImage.sprite != null
+            ? sourceImage.sprite
+            : runtimeSolidSprite;
+        renderer.color = sourceImage != null ? sourceImage.color : Color.white;
+
+        if (renderer.sprite != null)
+        {
+            Vector2 spriteSize = renderer.sprite.bounds.size;
+            Vector3 visualScale = new Vector3(
+                spriteSize.x > Mathf.Epsilon ? footprint.x / spriteSize.x : 1f,
+                spriteSize.y > Mathf.Epsilon ? footprint.y / spriteSize.y : 1f,
+                1f);
+            visual.transform.localScale = visualScale;
+            Vector3 spriteCenter = renderer.sprite.bounds.center;
+            visual.transform.localPosition = new Vector3(
+                -spriteCenter.x * visualScale.x,
+                -spriteCenter.y * visualScale.y,
+                0f);
+        }
+
+        if (isMoveRight)
+        {
+            MoveR moveRight = template.AddComponent<MoveR>();
+            moveRight.Configure(playerBody, definition.moveSpeed);
+        }
+        else if (isMoveLeft)
+        {
+            MoveL moveLeft = template.AddComponent<MoveL>();
+            moveLeft.Configure(playerBody, definition.moveSpeed);
+        }
+        else
+        {
+            Jump jump = template.AddComponent<Jump>();
+            jump.Configure(playerBody, definition.jumpPower);
+        }
+
+        definition.worldTemplate = template;
     }
 
     private void EnsureRuntimeSolidSprite()
