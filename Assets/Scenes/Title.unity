@@ -1366,6 +1366,8 @@ MonoBehaviour:
   bgmVolume: 0.5
   loop: 1
   playOnAwake: 1
+  cursorClip: {fileID: 8300000, guid: ee31a42e45b0c7c43b73d339037ac411, type: 3}
+  cursorVolume: 1
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

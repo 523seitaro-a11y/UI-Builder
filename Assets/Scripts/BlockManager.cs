@@ -135,6 +135,9 @@ public class BlockManager : MonoBehaviour
     [Tooltip("プレイ中にBGMScrollBarのTrackを奥へ配置する基準となるPlayerのSpriteRendererです。")]
     [SerializeField] private SpriteRenderer playerRenderer;
 
+    [Tooltip("回転可能なブロックをドラッグしている間だけ表示するCanvas上のPopです。")]
+    [SerializeField] private GameObject rotationDragPop;
+
     [Header("配置するブロック")]
     [SerializeField] private BlockDefinition[] blocks = Array.Empty<BlockDefinition>();
 
@@ -260,6 +263,8 @@ public class BlockManager : MonoBehaviour
     private PlacedBlock activePlacedBlock;
     private Vector3Int activeCell;
     private bool activeCellIsValid;
+    private Vector3Int lastCursorSoundCell;
+    private bool hasLastCursorSoundCell;
 
     private void Awake()
     {
@@ -316,6 +321,7 @@ public class BlockManager : MonoBehaviour
         }
 
         FindPlayerPhysicsReferences();
+        SetRotationDragPopVisible(false);
 
         foreach (BlockDefinition block in blocks)
         {
@@ -384,7 +390,7 @@ public class BlockManager : MonoBehaviour
             return;
         }
 
-        if (Input.GetMouseButtonDown(1) && activeDefinition.isBgmScrollBar)
+        if (Input.GetMouseButtonDown(1) && CanRotate(activeDefinition))
         {
             ToggleActiveBgmOrientation();
         }
@@ -543,6 +549,8 @@ public class BlockManager : MonoBehaviour
         PrepareGridPreview();
         activePreview.SetActive(true);
         activeGridPreview.SetActive(true);
+        hasLastCursorSoundCell = false;
+        SetRotationDragPopVisible(CanRotate(definition));
         DragStateChanged?.Invoke(true);
     }
 
@@ -732,6 +740,7 @@ public class BlockManager : MonoBehaviour
             (placementTilemap.CellToWorld(new Vector3Int(footprint.x - 1, footprint.y - 1, 0)) -
              placementTilemap.CellToWorld(Vector3Int.zero)) * 0.5f;
         activeCell = placementTilemap.WorldToCell(worldPoint - footprintSelectionOffset);
+        PlayCursorSoundWhenCellChanges(activeCell);
 
         // ドラッグ中はグリッドへ吸着させず、カーソルへ滑らかに追従させます。
         Vector3 previewPosition = worldPoint + dragPreviewOffset;
@@ -741,6 +750,24 @@ public class BlockManager : MonoBehaviour
         activeCellIsValid = CanPlace(activeDefinition, activeCell);
         activeGridPreview.transform.position = GetSnappedPosition(activeDefinition, activeCell);
         ApplyGridPreviewColor(activeCellIsValid ? validPreviewColor : invalidPreviewColor);
+    }
+
+    private void PlayCursorSoundWhenCellChanges(Vector3Int cell)
+    {
+        if (!IsInsidePlacementBounds(cell))
+        {
+            hasLastCursorSoundCell = false;
+            return;
+        }
+
+        if (hasLastCursorSoundCell && cell == lastCursorSoundCell)
+        {
+            return;
+        }
+
+        lastCursorSoundCell = cell;
+        hasLastCursorSoundCell = true;
+        AudioManager.Instance?.PlayCursorSound();
     }
 
     private void EndDrag()
@@ -803,12 +830,18 @@ public class BlockManager : MonoBehaviour
 
     public void SetBuildMode(bool isBuildMode)
     {
+        bool isReturningToBuildMode = isBuildMode && !IsBuildMode;
         EndPlacedBlockOperation();
         StopBgmHandlePlayerMotion();
         activeBgmScrollBar = null;
         isPlayerAttachedToBgmHandle = false;
         HideAllPlayModeHoverOutlines();
         IsBuildMode = isBuildMode;
+
+        if (isReturningToBuildMode)
+        {
+            ResetBgmScrollBarVolume();
+        }
 
         foreach (PlacedBlock block in placedBlocks)
         {
@@ -1592,6 +1625,14 @@ public class BlockManager : MonoBehaviour
                (definition.availableCount < 0 || definition.usedCount < definition.availableCount);
     }
 
+    private static bool CanRotate(BlockDefinition definition) =>
+        definition != null && definition.isBgmScrollBar;
+
+    private void SetRotationDragPopVisible(bool visible)
+    {
+        rotationDragPop?.SetActive(visible);
+    }
+
     private void PrepareBgmScrollBarDefinition(BlockDefinition definition)
     {
         definition.isBgmVertical = false;
@@ -1890,16 +1931,20 @@ public class BlockManager : MonoBehaviour
                 block.instance.transform.localScale = block.baseScale;
             }
         }
+
+        SetRotationDragPopVisible(false);
     }
 
     private void ClearDragState()
     {
         bool wasDragging = activePreview != null;
+        SetRotationDragPopVisible(false);
         activeDefinition = null;
         activePreview = null;
         activeGridPreview = null;
         activePlacedBlock = null;
         activeCellIsValid = false;
+        hasLastCursorSoundCell = false;
         previewRenderers.Clear();
         previewOriginalColors.Clear();
         previewColliders.Clear();

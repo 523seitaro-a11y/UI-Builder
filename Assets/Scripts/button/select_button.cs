@@ -19,4 +19,34 @@ public class select_button : MonoBehaviour {
     {
         SceneManager.LoadScene("Stage3");
     }
+
+    public void OnSelectButtonClickStage4()
+    {
+        SceneManager.LoadScene("Stage4");
+    }
+
+    public void OnSelectButtonClickStage5()
+    {
+        SceneManager.LoadScene("Stage5");
+    }
+
+    // public void OnSelectButtonClickStage6()
+    // {
+    //     SceneManager.LoadScene("Stage6");
+    // }
+
+    // public void OnSelectButtonClickStage7()
+    // {
+    //     SceneManager.LoadScene("Stage7");
+    // }
+
+    // public void OnSelectButtonClickStage8()
+    // {
+    //     SceneManager.LoadScene("Stage8");
+    // }
+
+    // public void OnSelectButtonClickStage9()
+    // {
+    //     SceneManager.LoadScene("Stage9");
+    // }
 }

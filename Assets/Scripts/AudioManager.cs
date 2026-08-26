@@ -21,7 +21,14 @@ public sealed class AudioManager : MonoBehaviour
     [SerializeField] private bool loop = true;
     [SerializeField] private bool playOnAwake = true;
 
+    [Header("効果音")]
+    [Tooltip("ブロックのドラッグ中、照準セルが切り替わったときに再生する音です。")]
+    [SerializeField] private AudioClip cursorClip;
+    [Range(0f, 1f)]
+    [SerializeField] private float cursorVolume = 1f;
+
     private AudioSource audioSource;
+    private AudioSource cursorAudioSource;
 
     private void Awake()
     {
@@ -40,6 +47,13 @@ public sealed class AudioManager : MonoBehaviour
         {
             audioSource = gameObject.AddComponent<AudioSource>();
         }
+
+        cursorAudioSource = gameObject.AddComponent<AudioSource>();
+        cursorAudioSource.playOnAwake = false;
+        cursorAudioSource.loop = false;
+        cursorAudioSource.spatialBlend = 0f;
+        cursorAudioSource.volume = 1f;
+        cursorAudioSource.priority = 0;
 
         ApplyAudioSourceSettings();
     }
@@ -64,6 +78,16 @@ public sealed class AudioManager : MonoBehaviour
     }
 
     public void StopBgm() => audioSource?.Stop();
+
+    public void PlayCursorSound()
+    {
+        if (cursorAudioSource == null || cursorClip == null)
+        {
+            return;
+        }
+
+        cursorAudioSource.PlayOneShot(cursorClip, cursorVolume);
+    }
 
     public void SetBgmVolume(float volume)
     {
@@ -94,6 +118,7 @@ public sealed class AudioManager : MonoBehaviour
     private void OnValidate()
     {
         bgmVolume = Mathf.Clamp01(bgmVolume);
+        cursorVolume = Mathf.Clamp01(cursorVolume);
         if (TryGetComponent(out AudioSource source))
         {
             audioSource = source;
