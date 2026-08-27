@@ -18,6 +18,9 @@ public class MainManager : MonoBehaviour
     [Header("長押し中のRetry表示")]
     [SerializeField] private Sprite retryCursorSprite;
 
+    [Tooltip("長押し中に表示するRetry画像の色です。")]
+    [SerializeField] private Color retryCursorColor = Color.white;
+
     [Tooltip("画面座標をワールド座標へ変換するカメラです。未設定ならMain Cameraを使用します。")]
     [SerializeField] private Camera pointerCamera;
 
@@ -283,6 +286,7 @@ public class MainManager : MonoBehaviour
 
         retryCursorRenderer = retryCursor.AddComponent<SpriteRenderer>();
         retryCursorRenderer.sprite = retryCursorSprite;
+        retryCursorRenderer.color = retryCursorColor;
         retryCursorRenderer.sortingLayerName = retryCursorSortingLayer;
         retryCursorRenderer.sortingOrder = retryCursorSortingOrder;
 
@@ -346,6 +350,12 @@ public class MainManager : MonoBehaviour
         retryFadedAlpha = Mathf.Clamp01(retryFadedAlpha);
         retryScaleInDuration = Mathf.Max(0f, retryScaleInDuration);
         retryScaleOutDuration = Mathf.Max(0f, retryScaleOutDuration);
+
+        if (retryCursorRenderer != null)
+        {
+            retryCursorRenderer.color = retryCursorColor;
+        }
+
         FindMissingReferences();
     }
 

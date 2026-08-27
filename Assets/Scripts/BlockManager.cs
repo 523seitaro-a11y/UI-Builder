@@ -21,6 +21,9 @@ public class BlockManager : MonoBehaviour
     public event Action<bool> DragStateChanged;
 
     public bool IsDragging => activePreview != null;
+    public Color PlayModeHoverOutlineColor => playModeHoverOutlineColor;
+    public Shader PlayModeHoverOutlineShader => playModeHoverOutlineShader;
+    public float PlayModeHoverOutlineWidth => playModeHoverOutlineWidth;
     public bool IsBuildMode { get; private set; } = true;
     public int PlacedBlockCount => placedBlocks.Count;
     public bool AllBlocksPlaced
@@ -253,6 +256,7 @@ public class BlockManager : MonoBehaviour
     private Texture2D runtimeSolidTexture;
     private Sprite runtimeSolidSprite;
     private PlacedBlock activeBgmScrollBar;
+    private PlacedBlock pressedPlayModeBlock;
     private bool isPlayerAttachedToBgmHandle;
     private Vector2 playerBgmHandleOffset;
     private bool hasBgmScrollBarResetVolume;
@@ -867,6 +871,7 @@ public class BlockManager : MonoBehaviour
         EndPlacedBlockOperation();
         StopBgmHandlePlayerMotion();
         activeBgmScrollBar = null;
+        pressedPlayModeBlock = null;
         isPlayerAttachedToBgmHandle = false;
         HideAllPlayModeHoverOutlines();
         IsBuildMode = isBuildMode;
@@ -1302,7 +1307,7 @@ public class BlockManager : MonoBehaviour
     {
         foreach (PlacedBlock block in placedBlocks)
         {
-            bool isOperating = false;
+            bool isOperating = block == activeBgmScrollBar;
             foreach (IBlockOperationState state in block.operationStates)
             {
                 if (state.IsOperating)
@@ -1318,33 +1323,36 @@ public class BlockManager : MonoBehaviour
 
     private void UpdatePlayModeHoverOutline()
     {
+        bool hasPointer = TryGetPointerState(out Vector2 screenPosition, out PointerPhase phase);
+        bool isPointerHeld = hasPointer &&
+                             (phase == PointerPhase.Began || phase == PointerPhase.Held);
+
+        if (isPointerHeld)
+        {
+            if (pressedPlayModeBlock == null && !IsPointerOverUi())
+            {
+                pressedPlayModeBlock = activeBgmScrollBar ?? FindPlacedBlock(screenPosition);
+            }
+        }
+        else
+        {
+            pressedPlayModeBlock = null;
+        }
+
         bool allowHover = showPlayModeHoverOutline &&
+                          !isPointerHeld &&
                           Input.touchCount == 0 &&
-                          !Input.GetMouseButton(0) &&
                           !IsPointerOverUi();
-        PlacedBlock hoveredBlock = allowHover
-            ? FindPlacedBlock(Input.mousePosition)
-            : null;
+        PlacedBlock outlinedBlock = isPointerHeld
+            ? pressedPlayModeBlock
+            : allowHover
+                ? FindPlacedBlock(Input.mousePosition)
+                : null;
 
         foreach (PlacedBlock block in placedBlocks)
         {
-            SetPlayModeHoverOutline(
-                block,
-                block == hoveredBlock && !IsBlockOperating(block));
+            SetPlayModeHoverOutline(block, block == outlinedBlock);
         }
-    }
-
-    private static bool IsBlockOperating(PlacedBlock block)
-    {
-        foreach (IBlockOperationState state in block.operationStates)
-        {
-            if (state.IsOperating)
-            {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private void CreatePlayModeHoverOutlines(PlacedBlock block)
@@ -1500,11 +1508,19 @@ public class BlockManager : MonoBehaviour
 
         for (int i = 0; i < block.renderers.Length; i++)
         {
+            SpriteRenderer renderer = block.renderers[i];
+            if (block.definition.isBgmScrollBar &&
+                (renderer == block.bgmTrackRenderer ||
+                 renderer == block.bgmTrackRightRenderer))
+            {
+                continue;
+            }
+
             Color color = block.baseColors[i];
-            block.renderers[i].sharedMaterial = inverted && operationInversionMaterial != null
+            renderer.sharedMaterial = inverted && operationInversionMaterial != null
                 ? operationInversionMaterial
                 : block.baseMaterials[i];
-            block.renderers[i].color = inverted && operationInversionMaterial == null
+            renderer.color = inverted && operationInversionMaterial == null
                 ? new Color(1f - color.r, 1f - color.g, 1f - color.b, color.a)
                 : color;
         }
@@ -2015,6 +2031,7 @@ public class BlockManager : MonoBehaviour
         EndPlacedBlockOperation();
         StopBgmHandlePlayerMotion();
         activeBgmScrollBar = null;
+        pressedPlayModeBlock = null;
         isPlayerAttachedToBgmHandle = false;
         HideAllPlayModeHoverOutlines();
 

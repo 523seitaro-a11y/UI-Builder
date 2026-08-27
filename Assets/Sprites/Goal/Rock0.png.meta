@@ -5,18 +5,6 @@ TextureImporter:
   - first:
       213: 4078206195599454054
     second: Rock0_0
-  - first:
-      213: -3464254647488227876
-    second: Rock0_1
-  - first:
-      213: -5462425618428196068
-    second: Rock0_2
-  - first:
-      213: 8479803856827095520
-    second: Rock0_3
-  - first:
-      213: 3271715521687932400
-    second: Rock0_4
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -138,10 +126,10 @@ TextureImporter:
       customData: 
       outline: []
       physicsShape: []
-      tessellationDetail: -1
+      tessellationDetail: 0
       bones: []
-      spriteID: 66fa0897de2b89830800000000000000
-      internalID: 4078206195599454054
+      spriteID: 751ea438835e2fe4b8fc4ab46fd386cb
+      internalID: -230131590
       vertices: []
       indices: 
       edges: []
@@ -150,7 +138,7 @@ TextureImporter:
     customData: 
     physicsShape: []
     bones: []
-    spriteID: 30bd6e1930f1bfa4cb06f54b5240f8a5
+    spriteID: 8e3b1612348131f44b80b0d2a21f8770
     internalID: 0
     vertices: []
     indices: 
@@ -162,7 +150,7 @@ TextureImporter:
       - key: SpriteEditor.SliceSettings
         value: '{"sliceOnImport":false,"gridCellCount":{"x":1.0,"y":1.0},"gridSpriteSize":{"x":500.0,"y":1000.0},"gridSpriteOffset":{"x":0.0,"y":0.0},"gridSpritePadding":{"x":0.0,"y":0.0},"pivot":{"x":0.0,"y":0.0},"autoSlicingMethod":0,"spriteAlignment":0,"slicingType":2,"keepEmptyRects":false,"isAlternate":false}'
     nameFileIdTable:
-      Rock0_0: 4078206195599454054
+      Rock0_0: -230131590
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

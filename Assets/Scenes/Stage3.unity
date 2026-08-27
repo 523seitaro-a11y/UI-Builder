@@ -554,7 +554,7 @@ MonoBehaviour:
   goalPopDuration: 0.25
   goalPopEase: 9
   useUnscaledGoalTime: 1
-  goalHoverSprite: {fileID: -8882385284063193461, guid: fa8dae2659c0d2a41bd6d70e06769951, type: 3}
+  goalReachedSortingOrder: 32767
   resultBackground: {fileID: 941542241}
   resultDisplayDelay: 0.5
   resultShownPosition: {x: 0, y: 0}
@@ -602,10 +602,11 @@ MonoBehaviour:
   blockManager: {fileID: 2100000103}
   longPressDuration: 1
   retryCursorSprite: {fileID: 5207804079435638006, guid: 410c5f345257a504191d63d3f399f73c, type: 3}
+  retryCursorColor: {r: 1, g: 1, b: 1, a: 1}
   pointerCamera: {fileID: 726185809}
-  retryCursorOffset: {x: 0, y: 0}
+  retryCursorOffset: {x: 0.28, y: -0.28}
   retryCursorZ: -5
-  retryCursorScale: {x: 1, y: 1, z: 1}
+  retryCursorScale: {x: 3, y: 3, z: 1}
   retryCursorSortingLayer: Default
   retryCursorSortingOrder: 100
   retryFadedAlpha: 0.2
@@ -7089,7 +7090,7 @@ SpriteRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
-  m_Sprite: {fileID: 1214791062, guid: 2e999155eb1148b47af38b3a620b219c, type: 3}
+  m_Sprite: {fileID: -2741521449686094395, guid: 2e999155eb1148b47af38b3a620b219c, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
