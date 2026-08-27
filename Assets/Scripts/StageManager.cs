@@ -82,6 +82,16 @@ public class StageManager : MonoBehaviour
     [Tooltip("鍵を取得するまでゴールに表示するRock0スプライトです。")]
     [SerializeField] private Sprite goalLockedSprite;
 
+    [Header("明るさギミック")]
+    [Tooltip("有効にすると、画面を指定値以下まで暗くするまでゴールをロックします。")]
+    [SerializeField] private bool useBrightnessGimmick;
+
+    [SerializeField] private ScreenBrightnessController brightnessController;
+
+    [Tooltip("ゴールを解除する最大の明るさです。0に近いほど暗くする必要があります。")]
+    [Range(0f, 1f)]
+    [SerializeField] private float requiredMaximumBrightness = 0.25f;
+
     [Header("ゴール判定とリザルト表示")]
     [SerializeField] private Collider2D playerCollider;
     [SerializeField] private Collider2D goalCollider;
@@ -216,6 +226,7 @@ public class StageManager : MonoBehaviour
         ConfigureStageNavigation();
         ConfigurePlayerLandingPhysics();
         CacheGoalPresentation();
+        ConfigureBrightnessGimmick();
 
         ConfigurePauseButtons();
         ResetTransitionOverlay();
@@ -408,6 +419,9 @@ public class StageManager : MonoBehaviour
 
     private bool HasReachedGoal() =>
         (!useKeyGimmick || isKeyCollected) &&
+        (!useBrightnessGimmick ||
+         (brightnessController != null &&
+          brightnessController.IsAtOrBelow(requiredMaximumBrightness))) &&
         playerCollider != null &&
         goalCollider != null &&
         playerCollider.enabled &&
@@ -925,6 +939,7 @@ public class StageManager : MonoBehaviour
     {
         ResetInteractiveGoalPresentation();
         ResetKeyGimmick();
+        ResetBrightnessGimmick();
         CurrentMode = StageMode.Build;
         SetBuildObjects(true);
         SetPlayerEnabled(false);
@@ -1159,10 +1174,37 @@ public class StageManager : MonoBehaviour
             return;
         }
 
-        goalSpriteRenderer.sprite = useKeyGimmick && !isKeyCollected && goalLockedSprite != null
+        bool brightnessLocked = useBrightnessGimmick &&
+                                (brightnessController == null ||
+                                 !brightnessController.IsAtOrBelow(requiredMaximumBrightness));
+        bool isLocked = (useKeyGimmick && !isKeyCollected) || brightnessLocked;
+        goalSpriteRenderer.sprite = isLocked && goalLockedSprite != null
             ? goalLockedSprite
             : goalDefaultSprite;
     }
+
+    private void ConfigureBrightnessGimmick()
+    {
+        if (brightnessController == null)
+        {
+            return;
+        }
+
+        brightnessController.BrightnessChanged -= OnBrightnessChanged;
+        brightnessController.BrightnessChanged += OnBrightnessChanged;
+    }
+
+    private void ResetBrightnessGimmick()
+    {
+        if (useBrightnessGimmick)
+        {
+            brightnessController?.ResetBrightness();
+        }
+
+        RefreshGoalLockPresentation();
+    }
+
+    private void OnBrightnessChanged(float _) => RefreshGoalLockPresentation();
 
     private void CacheGoalPresentation()
     {
@@ -1264,6 +1306,7 @@ public class StageManager : MonoBehaviour
         goalReservedCellSize.y = Mathf.Max(2, goalReservedCellSize.y);
         keyReservedCellSize.x = Mathf.Max(1, keyReservedCellSize.x);
         keyReservedCellSize.y = Mathf.Max(1, keyReservedCellSize.y);
+        requiredMaximumBrightness = Mathf.Clamp01(requiredMaximumBrightness);
         playerAbsorbDuration = Mathf.Max(0f, playerAbsorbDuration);
         goalPopScale = Mathf.Max(1f, goalPopScale);
         goalPopDuration = Mathf.Max(0f, goalPopDuration);
@@ -1317,6 +1360,11 @@ public class StageManager : MonoBehaviour
             {
                 key = keyObject.transform;
             }
+        }
+
+        if (brightnessController == null)
+        {
+            brightnessController = FindFirstObjectByType<ScreenBrightnessController>();
         }
 
         if (stageTilemap == null)
@@ -1503,6 +1551,11 @@ public class StageManager : MonoBehaviour
 
     private void OnDestroy()
     {
+        if (brightnessController != null)
+        {
+            brightnessController.BrightnessChanged -= OnBrightnessChanged;
+        }
+
         pauseButton?.onClick.RemoveListener(ShowPause);
         pauseBackButton?.onClick.RemoveListener(HidePause);
         nextStageButton?.onClick.RemoveListener(LoadNextStage);

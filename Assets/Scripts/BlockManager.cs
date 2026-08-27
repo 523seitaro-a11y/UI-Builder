@@ -79,6 +79,9 @@ public class BlockManager : MonoBehaviour
         [Tooltip("BGM音量を操作する1×4のスクロールバーブロックとして扱います。")]
         public bool isBgmScrollBar;
 
+        [Tooltip("画面の明るさを操作する1×4のスクロールバーブロックとして扱います。")]
+        public bool isBrightnessScrollBar;
+
         [Tooltip("worldTemplate未設定のMoveR/MoveLを自動生成するときの移動速度です。")]
         [Min(0f)] public float moveSpeed = 5f;
 
@@ -145,6 +148,9 @@ public class BlockManager : MonoBehaviour
 
     [Tooltip("プレイ中にBGMScrollBarのTrackを奥へ配置する基準となるPlayerのSpriteRendererです。")]
     [SerializeField] private SpriteRenderer playerRenderer;
+
+    [Tooltip("BrightnessScrollBarから画面の明るさを変更するコントローラーです。")]
+    [SerializeField] private ScreenBrightnessController brightnessController;
 
     [Tooltip("回転可能なブロックをドラッグしている間だけ表示するCanvas上のPopです。")]
     [SerializeField] private GameObject rotationDragPop;
@@ -333,6 +339,11 @@ public class BlockManager : MonoBehaviour
             stageManager = FindFirstObjectByType<StageManager>();
         }
 
+        if (brightnessController == null)
+        {
+            brightnessController = FindFirstObjectByType<ScreenBrightnessController>();
+        }
+
         FindPlayerPhysicsReferences();
         SetRotationDragPopVisible(false);
 
@@ -354,7 +365,7 @@ public class BlockManager : MonoBehaviour
                 continue;
             }
 
-            if (block.isBgmScrollBar)
+            if (IsScrollBar(block))
             {
                 PrepareBgmScrollBarDefinition(block);
             }
@@ -552,7 +563,7 @@ public class BlockManager : MonoBehaviour
         DestroyPlayModeHoverOutlines(block);
         activePlacedBlock = block;
         block.instance.transform.localScale = block.baseScale;
-        if (block.definition.isBgmScrollBar)
+        if (IsScrollBar(block.definition))
         {
             block.definition.isBgmVertical = block.isBgmVertical;
             UpdateBgmFootprint(block.definition);
@@ -571,7 +582,7 @@ public class BlockManager : MonoBehaviour
         activeGridPreview = Instantiate(definition.worldTemplate, placedBlockParent);
         activeGridPreview.name = $"{activePreview.name} (Grid Preview)";
 
-        if (definition.isBgmScrollBar)
+        if (IsScrollBar(definition))
         {
             ApplyBgmOrientation(activePreview, definition.isBgmVertical);
             ApplyBgmOrientation(activeGridPreview, definition.isBgmVertical);
@@ -667,7 +678,7 @@ public class BlockManager : MonoBehaviour
                 continue;
             }
 
-            if (block.definition.isBgmScrollBar && IsPointInsideBlockVisual(block, point))
+            if (IsScrollBar(block.definition) && IsPointInsideBlockVisual(block, point))
             {
                 return block;
             }
@@ -811,7 +822,7 @@ public class BlockManager : MonoBehaviour
         }
         else if (activePlacedBlock != null)
         {
-            if (activeDefinition.isBgmScrollBar)
+            if (IsScrollBar(activeDefinition))
             {
                 activeDefinition.isBgmVertical = activePlacedBlock.isBgmVertical;
                 UpdateBgmFootprint(activeDefinition);
@@ -842,7 +853,7 @@ public class BlockManager : MonoBehaviour
 
         PlacedBlock block = activePlacedBlock ?? CreatePlacedBlock();
         block.cell = cell;
-        block.isBgmVertical = activeDefinition.isBgmScrollBar && activeDefinition.isBgmVertical;
+        block.isBgmVertical = IsScrollBar(activeDefinition) && activeDefinition.isBgmVertical;
         block.instance.transform.localScale = block.baseScale;
         placedBlocks.Add(block);
         CreatePlayModeHoverOutlines(block);
@@ -899,18 +910,13 @@ public class BlockManager : MonoBehaviour
     /// </summary>
     public void ResetBgmScrollBarVolume()
     {
-        if (!hasBgmScrollBarResetVolume)
-        {
-            return;
-        }
-
         StopBgmHandlePlayerMotion();
         activeBgmScrollBar = null;
         isPlayerAttachedToBgmHandle = false;
 
         foreach (PlacedBlock block in placedBlocks)
         {
-            if (!block.definition.isBgmScrollBar || block.bgmHandle == null)
+            if (!IsScrollBar(block.definition) || block.bgmHandle == null)
             {
                 continue;
             }
@@ -938,7 +944,12 @@ public class BlockManager : MonoBehaviour
             ApplyBgmTrackVisual(block, IsBuildMode);
         }
 
-        AudioManager.Instance?.SetBgmVolume(bgmScrollBarResetVolume);
+        if (hasBgmScrollBarResetVolume)
+        {
+            AudioManager.Instance?.SetBgmVolume(bgmScrollBarResetVolume);
+        }
+
+        brightnessController?.ResetBrightness();
     }
 
     private PlacedBlock CreatePlacedBlock()
@@ -964,13 +975,13 @@ public class BlockManager : MonoBehaviour
             }
         }
 
-        Transform bgmHandle = activeDefinition.isBgmScrollBar
+        Transform bgmHandle = IsScrollBar(activeDefinition)
             ? activePreview.transform.Find("Handle")
             : null;
-        SpriteRenderer bgmTrackRenderer = activeDefinition.isBgmScrollBar
+        SpriteRenderer bgmTrackRenderer = IsScrollBar(activeDefinition)
             ? activePreview.transform.Find("Track")?.GetComponent<SpriteRenderer>()
             : null;
-        SpriteRenderer bgmTrackRightRenderer = activeDefinition.isBgmScrollBar
+        SpriteRenderer bgmTrackRightRenderer = IsScrollBar(activeDefinition)
             ? activePreview.transform.Find("TrackRight")?.GetComponent<SpriteRenderer>()
             : null;
 
@@ -1000,7 +1011,7 @@ public class BlockManager : MonoBehaviour
                 : 0,
             bgmNormalizedValue = 1f,
             bgmMaximumVolume = activeDefinition.bgmMaximumVolume,
-            isBgmVertical = activeDefinition.isBgmScrollBar && activeDefinition.isBgmVertical
+            isBgmVertical = IsScrollBar(activeDefinition) && activeDefinition.isBgmVertical
         };
     }
 
@@ -1036,7 +1047,7 @@ public class BlockManager : MonoBehaviour
         for (int i = placedBlocks.Count - 1; i >= 0; i--)
         {
             PlacedBlock block = placedBlocks[i];
-            if (!block.definition.isBgmScrollBar ||
+            if (!IsScrollBar(block.definition) ||
                 block.bgmHandleCollider == null ||
                 !block.bgmHandleCollider.enabled)
             {
@@ -1108,8 +1119,15 @@ public class BlockManager : MonoBehaviour
             ? 1f
             : Mathf.InverseLerp(minimum, maximum, handleAxisPosition);
 
-        AudioManager.Instance?.SetBgmVolume(
-            block.bgmMaximumVolume * block.bgmNormalizedValue);
+        if (block.definition.isBrightnessScrollBar)
+        {
+            brightnessController?.SetBrightness(block.bgmNormalizedValue);
+        }
+        else
+        {
+            AudioManager.Instance?.SetBgmVolume(
+                block.bgmMaximumVolume * block.bgmNormalizedValue);
+        }
     }
 
     private bool TryAttachPlayerToBgmHandle(PlacedBlock block)
@@ -1182,7 +1200,7 @@ public class BlockManager : MonoBehaviour
 
     private void ApplyBgmTrackDepth(PlacedBlock block, bool isBuildMode)
     {
-        if (!block.definition.isBgmScrollBar || block.bgmTrackRenderer == null)
+        if (!IsScrollBar(block.definition) || block.bgmTrackRenderer == null)
         {
             return;
         }
@@ -1229,7 +1247,7 @@ public class BlockManager : MonoBehaviour
 
     private void ApplyBgmTrackVisual(PlacedBlock block, bool isBuildMode)
     {
-        if (!block.definition.isBgmScrollBar || block.bgmTrackRenderer == null ||
+        if (!IsScrollBar(block.definition) || block.bgmTrackRenderer == null ||
             block.bgmTrackRightRenderer == null || block.bgmHandle == null)
         {
             return;
@@ -1449,7 +1467,7 @@ public class BlockManager : MonoBehaviour
             return false;
         }
 
-        return !block.definition.isBgmScrollBar ||
+        return !IsScrollBar(block.definition) ||
                (block.bgmHandle != null && source.transform.IsChildOf(block.bgmHandle));
     }
 
@@ -1611,7 +1629,7 @@ public class BlockManager : MonoBehaviour
             {
                 Vector3Int cell = origin + new Vector3Int(x, y, 0);
                 occupiedCells.Add(cell);
-                if (!definition.isBgmScrollBar)
+                if (!IsScrollBar(definition))
                 {
                     SetCompositeTile(cell, runtimeColliderTile);
                 }
@@ -1631,7 +1649,7 @@ public class BlockManager : MonoBehaviour
                 Vector3Int cell = origin + new Vector3Int(x, y, 0);
                 occupiedCells.Remove(cell);
 
-                if (!definition.isBgmScrollBar &&
+                if (!IsScrollBar(definition) &&
                     placementTilemap != null &&
                     placementTilemap.GetTile(cell) == runtimeColliderTile)
                 {
@@ -1670,8 +1688,10 @@ public class BlockManager : MonoBehaviour
                (definition.availableCount < 0 || definition.usedCount < definition.availableCount);
     }
 
-    private static bool CanRotate(BlockDefinition definition) =>
-        definition != null && definition.isBgmScrollBar;
+    private static bool IsScrollBar(BlockDefinition definition) =>
+        definition != null && (definition.isBgmScrollBar || definition.isBrightnessScrollBar);
+
+    private static bool CanRotate(BlockDefinition definition) => IsScrollBar(definition);
 
     private void SetRotationDragPopVisible(bool visible)
     {
@@ -1687,7 +1707,9 @@ public class BlockManager : MonoBehaviour
     {
         definition.isBgmVertical = false;
         UpdateBgmFootprint(definition);
-        definition.bgmMaximumVolume = AudioManager.CurrentBgmVolume;
+        definition.bgmMaximumVolume = definition.isBgmScrollBar
+            ? AudioManager.CurrentBgmVolume
+            : 1f;
         if (definition.worldTemplate != null)
         {
             return;
@@ -1695,7 +1717,7 @@ public class BlockManager : MonoBehaviour
 
         EnsureRuntimeSolidSprite();
 
-        GameObject template = new GameObject("BGMScrollBar Template");
+        GameObject template = new GameObject($"{definition.displayName} Template");
         template.transform.SetParent(placedBlockParent, false);
 
         GameObject track = new GameObject("Track");
@@ -1966,7 +1988,7 @@ public class BlockManager : MonoBehaviour
     private void SetPlacedCollidersAsTriggers()
     {
         // BGMScrollBarはTilemapへ統合せず、ハンドル1セルだけを通常Colliderとして残します。
-        if (!mergePlacedBlocksIntoTilemap || activeDefinition.isBgmScrollBar)
+        if (!mergePlacedBlocksIntoTilemap || IsScrollBar(activeDefinition))
         {
             return;
         }

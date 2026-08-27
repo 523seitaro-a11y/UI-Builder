@@ -13,14 +13,23 @@ public sealed class BlockManagerEditor : Editor
         public readonly string SpritePath;
         public readonly Vector2Int Footprint;
         public readonly bool IsBgmScrollBar;
+        public readonly bool IsBrightnessScrollBar;
 
-        public BlockPreset(string name, string spritePath, Vector2Int footprint, bool isBgmScrollBar = false)
+        public BlockPreset(
+            string name,
+            string spritePath,
+            Vector2Int footprint,
+            bool isBgmScrollBar = false,
+            bool isBrightnessScrollBar = false)
         {
             Name = name;
             SpritePath = spritePath;
             Footprint = footprint;
             IsBgmScrollBar = isBgmScrollBar;
+            IsBrightnessScrollBar = isBrightnessScrollBar;
         }
+
+        public bool IsScrollBar => IsBgmScrollBar || IsBrightnessScrollBar;
     }
 
     private static readonly BlockPreset[] Presets =
@@ -28,7 +37,12 @@ public sealed class BlockManagerEditor : Editor
         new BlockPreset("MoveR", "Assets/Sprites/Block/MoveR.png", Vector2Int.one),
         new BlockPreset("MoveL", "Assets/Sprites/Block/MoveL.png", Vector2Int.one),
         new BlockPreset("Jump", "Assets/Sprites/Block/Jump.png", new Vector2Int(2, 1)),
-        new BlockPreset("BGMScrollBar", "Assets/Sprites/Block/BGM.png", new Vector2Int(4, 1), true)
+        new BlockPreset("BGMScrollBar", "Assets/Sprites/Block/BGM.png", new Vector2Int(4, 1), isBgmScrollBar: true),
+        new BlockPreset(
+            "BrightnessScrollBar",
+            "Assets/Sprites/Block/Brightness.png",
+            new Vector2Int(4, 1),
+            isBrightnessScrollBar: true)
     };
 
     private SerializedProperty blocksProperty;
@@ -107,7 +121,7 @@ public sealed class BlockManagerEditor : Editor
             SetSourceActive(sourceRoot, true);
 
             Image sourceImage = source.GetComponent<Image>() ?? source.GetComponentInChildren<Image>(true);
-            if (preset.IsBgmScrollBar)
+            if (preset.IsScrollBar)
             {
                 definition.FindPropertyRelative("bgmTrackSource").objectReferenceValue = sourceImage;
                 Image currentHandle = definition.FindPropertyRelative("bgmHandleSource").objectReferenceValue as Image;
@@ -134,6 +148,7 @@ public sealed class BlockManagerEditor : Editor
         definition.FindPropertyRelative("availableCount").intValue = 1;
         definition.FindPropertyRelative("hideSourceWhenExhausted").boolValue = true;
         definition.FindPropertyRelative("isBgmScrollBar").boolValue = preset.IsBgmScrollBar;
+        definition.FindPropertyRelative("isBrightnessScrollBar").boolValue = preset.IsBrightnessScrollBar;
         definition.FindPropertyRelative("moveSpeed").floatValue = 5f;
         definition.FindPropertyRelative("jumpPower").floatValue = 15f;
     }
@@ -188,7 +203,7 @@ public sealed class BlockManagerEditor : Editor
         RectTransform source = sourceObject.GetComponent<RectTransform>();
         source.SetParent(parent, false);
         source.SetAsLastSibling();
-        source.sizeDelta = preset.IsBgmScrollBar ? new Vector2(240f, 64f) : new Vector2(72f, 72f);
+        source.sizeDelta = preset.IsScrollBar ? new Vector2(240f, 64f) : new Vector2(72f, 72f);
 
         Image image = sourceObject.GetComponent<Image>();
         image.sprite = AssetDatabase.LoadAssetAtPath<Sprite>(preset.SpritePath);
