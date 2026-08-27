@@ -602,7 +602,8 @@ MonoBehaviour:
   blockManager: {fileID: 2100000103}
   longPressDuration: 1
   retryCursorSprite: {fileID: 5207804079435638006, guid: 410c5f345257a504191d63d3f399f73c, type: 3}
-  retryCursorColor: {r: 1, g: 1, b: 1, a: 1}
+  retryBeforeColor: {r: 0, g: 0, b: 0, a: 1}
+  retryAfterColor: {r: 0.5896226, g: 0.5896226, b: 0.5896226, a: 1}
   pointerCamera: {fileID: 726185809}
   retryCursorOffset: {x: 0.28, y: -0.28}
   retryCursorZ: -5
@@ -5233,6 +5234,7 @@ MonoBehaviour:
   blockAvailabilityVersion: 1
   bgmTrackRightOpacity: 0.4
   bgmTrackColor: {r: 0.4392157, g: 0.4392157, b: 0.4392157, a: 1}
+  bgmScrollBarShadowSprite: {fileID: 5548891157742276716, guid: 3e90ec232b8f08841bcdfacc45f16fe4, type: 3}
   placementGridOrigin: {x: -8, y: -4}
   placementGridSize: {x: 16, y: 8}
   mergePlacedBlocksIntoTilemap: 1

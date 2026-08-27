@@ -341,7 +341,7 @@ public class StageManager : MonoBehaviour
         bool hovered = Input.touchCount == 0 &&
                        !IsPointerOverUi() &&
                        IsPointerOverGoal(Input.mousePosition);
-        SetGoalHoverOutline(hovered);
+        SetGoalHoverOutline(true, hovered);
     }
 
     private async UniTaskVoid RunStageAsync(CancellationToken token)
@@ -1225,10 +1225,7 @@ public class StageManager : MonoBehaviour
     private void SetGoalClickable(bool clickable)
     {
         isGoalClickable = clickable;
-        if (!clickable)
-        {
-            SetGoalHoverOutline(false);
-        }
+        SetGoalHoverOutline(clickable, false);
     }
 
     private bool IsPointerOverGoal(Vector2 screenPosition)
@@ -1302,7 +1299,7 @@ public class StageManager : MonoBehaviour
         }
     }
 
-    private void SetGoalHoverOutline(bool visible)
+    private void SetGoalHoverOutline(bool visible, bool hovered)
     {
         if (goalSpriteRenderer == null)
         {
@@ -1312,9 +1309,11 @@ public class StageManager : MonoBehaviour
         float outlineWidth = blockManager != null
             ? blockManager.PlayModeHoverOutlineWidth
             : 0.06f;
-        Color outlineColor = blockManager != null
-            ? blockManager.PlayModeHoverOutlineColor
-            : new Color(1f, 0.5764706f, 0.5803922f, 1f);
+        Color outlineColor = hovered
+            ? blockManager != null
+                ? blockManager.PlayModeHoverOutlineColor
+                : new Color(1f, 0.5764706f, 0.5803922f, 1f)
+            : Color.white;
 
         for (int i = 0; i < goalHoverOutlineRenderers.Length; i++)
         {

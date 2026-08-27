@@ -165,6 +165,9 @@ public class BlockManager : MonoBehaviour
     [Tooltip("BGMScrollBarのTrack全体に使用する色です。右側にはこの色とRight Opacityの両方が適用されます。")]
     [SerializeField] private Color bgmTrackColor = new Color(0.23137257f, 0.23137257f, 0.23137257f, 1f);
 
+    [Tooltip("BGMScrollBarをドラッグ中、配置予定位置の透過表示に使用するSpriteです。")]
+    [SerializeField] private Sprite bgmScrollBarShadowSprite;
+
     [Header("配置範囲")]
     [Tooltip("配置グリッド左下のTilemapセル座標です。")]
     [SerializeField] private Vector2Int placementGridOrigin = new Vector2Int(-9, -4);
@@ -277,6 +280,7 @@ public class BlockManager : MonoBehaviour
     private BlockDefinition activeDefinition;
     private GameObject activePreview;
     private GameObject activeGridPreview;
+    private bool activeGridPreviewUsesBgmShadow;
     private PlacedBlock activePlacedBlock;
     private Vector3Int activeCell;
     private bool activeCellIsValid;
@@ -572,13 +576,13 @@ public class BlockManager : MonoBehaviour
     {
         activeDefinition = definition;
         activePreview = preview;
-        activeGridPreview = Instantiate(definition.worldTemplate, placedBlockParent);
+        activeGridPreview = CreateGridPreview(definition);
         activeGridPreview.name = $"{activePreview.name} (Grid Preview)";
 
         if (definition.isBgmScrollBar)
         {
             ApplyBgmOrientation(activePreview, definition.isBgmVertical);
-            ApplyBgmOrientation(activeGridPreview, definition.isBgmVertical);
+            ApplyActiveBgmGridPreviewOrientation(definition.isBgmVertical);
         }
 
         CacheAndDisablePreviewComponents();
@@ -591,12 +595,42 @@ public class BlockManager : MonoBehaviour
         DragStateChanged?.Invoke(true);
     }
 
+    private GameObject CreateGridPreview(BlockDefinition definition)
+    {
+        activeGridPreviewUsesBgmShadow = definition.isBgmScrollBar &&
+                                         bgmScrollBarShadowSprite != null;
+        if (!activeGridPreviewUsesBgmShadow)
+        {
+            return Instantiate(definition.worldTemplate, placedBlockParent);
+        }
+
+        GameObject shadow = new GameObject("BGMScrollBar Shadow");
+        shadow.layer = activePreview != null ? activePreview.layer : gameObject.layer;
+        shadow.transform.SetParent(placedBlockParent, false);
+        SpriteRenderer shadowRenderer = shadow.AddComponent<SpriteRenderer>();
+        shadowRenderer.sprite = bgmScrollBarShadowSprite;
+        return shadow;
+    }
+
+    private void ApplyActiveBgmGridPreviewOrientation(bool isVertical)
+    {
+        if (!activeGridPreviewUsesBgmShadow)
+        {
+            ApplyBgmOrientation(activeGridPreview, isVertical);
+            return;
+        }
+
+        activeGridPreview.transform.localRotation = isVertical
+            ? Quaternion.Euler(0f, 0f, 90f)
+            : Quaternion.identity;
+    }
+
     private void ToggleActiveBgmOrientation()
     {
         activeDefinition.isBgmVertical = !activeDefinition.isBgmVertical;
         UpdateBgmFootprint(activeDefinition);
         ApplyBgmOrientation(activePreview, activeDefinition.isBgmVertical);
-        ApplyBgmOrientation(activeGridPreview, activeDefinition.isBgmVertical);
+        ApplyActiveBgmGridPreviewOrientation(activeDefinition.isBgmVertical);
     }
 
     private static void UpdateBgmFootprint(BlockDefinition definition)
@@ -2086,6 +2120,7 @@ public class BlockManager : MonoBehaviour
         activeDefinition = null;
         activePreview = null;
         activeGridPreview = null;
+        activeGridPreviewUsesBgmShadow = false;
         activePlacedBlock = null;
         activeCellIsValid = false;
         hasLastCursorSoundCell = false;
