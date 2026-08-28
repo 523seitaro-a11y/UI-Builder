@@ -2264,7 +2264,7 @@ MonoBehaviour:
   keyReservedCellSize: {x: 1, y: 1}
   keyCollider: {fileID: 2100000903}
   goalLockedSprite: {fileID: 4078206195599454054, guid: a157de6897b33db4986e13c865384820, type: 3}
-  useBrightnessGimmick: 1
+  useBrightnessGimmick: 0
   brightnessController: {fileID: 858484894}
   requiredMaximumBrightness: 0.25
   playerCollider: {fileID: 153433569}
@@ -3165,7 +3165,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: "\u660E\u308B\u3055\u3092\u5DE6\u3078\u3000\u30B4\u30FC\u30EB\u306F\u53F3\u3078"
+  m_text: "\u660E\u308B\u3044\u3046\u3061\u306B\u9053\u3092\u899A\u3048\u3088\u3046\u3000\u6697\u304F\u3059\u308B\u3068\u58C1\u304C\u958B\u304F"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: b745ea105f221bb45a50e1ab7d16153b, type: 2}
   m_sharedMaterial: {fileID: -4259499787218161454, guid: b745ea105f221bb45a50e1ab7d16153b, type: 2}
@@ -3874,6 +3874,7 @@ GameObject:
   m_Component:
   - component: {fileID: 858484895}
   - component: {fileID: 858484894}
+  - component: {fileID: 858484896}
   m_Layer: 0
   m_Name: ScreenBrightnessController
   m_TagString: Untagged
@@ -3895,7 +3896,24 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   darknessOverlay: {fileID: 765328010}
   defaultBrightness: 1
-  maximumDarknessAlpha: 0.82
+  maximumDarknessAlpha: 0.94
+--- !u!114 &858484896
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 858484893}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c1b438d8a2f94853a82397389a28aa52, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  brightnessController: {fileID: 858484894}
+  openingBrightness: 0.25
+  barrierPosition: {x: -4, y: -0.5}
+  barrierSize: {x: 1, y: 8}
+  barrierColor: {r: 1, g: 0.86, b: 0.25, a: 1}
 --- !u!4 &858484895
 Transform:
   m_ObjectHideFlags: 0
@@ -4878,8 +4896,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 1007, y: -723}
-  m_SizeDelta: {x: 88, y: 72}
+  m_AnchoredPosition: {x: 300, y: -562}
+  m_SizeDelta: {x: 240, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1260112838
 MonoBehaviour:
