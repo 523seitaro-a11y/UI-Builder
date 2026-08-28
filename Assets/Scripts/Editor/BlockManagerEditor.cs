@@ -127,6 +127,10 @@ public sealed class BlockManagerEditor : Editor
                 Image currentHandle = definition.FindPropertyRelative("bgmHandleSource").objectReferenceValue as Image;
                 definition.FindPropertyRelative("bgmHandleSource").objectReferenceValue =
                     FindBgmHandle(sourceRoot, sourceImage, currentHandle);
+                definition.FindPropertyRelative("brightnessIconSprite").objectReferenceValue =
+                    preset.IsBrightnessScrollBar
+                        ? FindSprite(preset.SpritePath, "BrightnessIcon")
+                        : null;
             }
         }
         else
@@ -203,10 +207,16 @@ public sealed class BlockManagerEditor : Editor
         RectTransform source = sourceObject.GetComponent<RectTransform>();
         source.SetParent(parent, false);
         source.SetAsLastSibling();
-        source.sizeDelta = preset.IsScrollBar ? new Vector2(240f, 64f) : new Vector2(72f, 72f);
+        source.sizeDelta = preset.IsBrightnessScrollBar
+            ? new Vector2(450f, 100f)
+            : preset.IsScrollBar
+                ? new Vector2(240f, 64f)
+                : new Vector2(72f, 72f);
 
         Image image = sourceObject.GetComponent<Image>();
-        image.sprite = AssetDatabase.LoadAssetAtPath<Sprite>(preset.SpritePath);
+        image.sprite = preset.IsBrightnessScrollBar
+            ? FindSprite(preset.SpritePath, "BrightnessPalette")
+            : AssetDatabase.LoadAssetAtPath<Sprite>(preset.SpritePath);
         image.preserveAspect = true;
         image.raycastTarget = true;
 
@@ -257,6 +267,19 @@ public sealed class BlockManagerEditor : Editor
         }
 
         return track;
+    }
+
+    private static Sprite FindSprite(string assetPath, string spriteName)
+    {
+        foreach (UnityEngine.Object asset in AssetDatabase.LoadAllAssetsAtPath(assetPath))
+        {
+            if (asset is Sprite sprite && string.Equals(sprite.name, spriteName, StringComparison.Ordinal))
+            {
+                return sprite;
+            }
+        }
+
+        return null;
     }
 
     private static void PositionAfterExistingSources(RectTransform source, RectTransform parent)

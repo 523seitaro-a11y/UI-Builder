@@ -1,4 +1,3 @@
-using System;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -11,30 +10,34 @@ public sealed class ScreenBrightnessController : MonoBehaviour
 {
     [SerializeField] private Image darknessOverlay;
 
+    [Tooltip("暗転中も表示する操作UIを置く、BrightnessOverlay直後のレイヤーです。")]
+    [SerializeField] private RectTransform visibilityLayer;
+
     [Range(0f, 1f)]
     [SerializeField] private float defaultBrightness = 1f;
 
-    [Tooltip("明るさが0のときに重ねる黒の最大不透明度です。完全な黒にはせず、操作対象が見える値にします。")]
+    [Tooltip("明るさが0のときに重ねる黒の最大不透明度です。1でゲーム世界を完全に暗転します。")]
     [Range(0f, 1f)]
     [SerializeField] private float maximumDarknessAlpha = 0.82f;
 
-    public event Action<float> BrightnessChanged;
+    [Tooltip("ハンドルを左端からこの割合まで動かしても、完全暗転を維持します。")]
+    [Range(0f, 0.5f)]
+    [SerializeField] private float fullDarknessHandleRange = 0.2f;
 
     public float Brightness { get; private set; } = 1f;
+
+    public RectTransform VisibilityLayer => visibilityLayer;
 
     private void Awake() => ResetBrightness();
 
     public void SetBrightness(float brightness)
     {
-        Brightness = Mathf.Clamp01(brightness);
+        float handleValue = Mathf.Clamp01(brightness);
+        Brightness = Mathf.InverseLerp(fullDarknessHandleRange, 1f, handleValue);
         ApplyOverlay();
-        BrightnessChanged?.Invoke(Brightness);
     }
 
     public void ResetBrightness() => SetBrightness(defaultBrightness);
-
-    public bool IsAtOrBelow(float maximumBrightness) =>
-        Brightness <= Mathf.Clamp01(maximumBrightness);
 
     private void ApplyOverlay()
     {
@@ -56,6 +59,7 @@ public sealed class ScreenBrightnessController : MonoBehaviour
     {
         defaultBrightness = Mathf.Clamp01(defaultBrightness);
         maximumDarknessAlpha = Mathf.Clamp01(maximumDarknessAlpha);
+        fullDarknessHandleRange = Mathf.Clamp(fullDarknessHandleRange, 0f, 0.5f);
 
         if (!Application.isPlaying)
         {

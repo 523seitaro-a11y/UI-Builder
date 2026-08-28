@@ -2354,9 +2354,6 @@ MonoBehaviour:
   keyReservedCellSize: {x: 1, y: 1}
   keyCollider: {fileID: 2100000903}
   goalLockedSprite: {fileID: 4078206195599454054, guid: a157de6897b33db4986e13c865384820, type: 3}
-  useBrightnessGimmick: 0
-  brightnessController: {fileID: 0}
-  requiredMaximumBrightness: 0.25
   playerCollider: {fileID: 153433569}
   goalCollider: {fileID: 1531524892}
   useInteractiveGoalResult: 1
@@ -3685,6 +3682,41 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!1 &2100001000
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2100001001}
+  m_Layer: 5
+  m_Name: BrightnessVisibilityLayer
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &2100001001
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2100001000}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 935018952}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 1, y: 1}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 0, y: 0}
+  m_Pivot: {x: 0.5, y: 0.5}
 --- !u!1 &850756782
 GameObject:
   m_ObjectHideFlags: 0
@@ -3848,8 +3880,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   darknessOverlay: {fileID: 765328010}
+  visibilityLayer: {fileID: 2100001001}
   defaultBrightness: 1
-  maximumDarknessAlpha: 0.82
+  maximumDarknessAlpha: 1
+  fullDarknessHandleRange: 0.2
 --- !u!4 &858484895
 Transform:
   m_ObjectHideFlags: 0
@@ -4186,12 +4220,13 @@ RectTransform:
   m_LocalScale: {x: 0, y: 0, z: 0}
   m_ConstrainProportionsScale: 0
   m_Children:
+  - {fileID: 765328012}
+  - {fileID: 2100001001}
   - {fileID: 457092461}
   - {fileID: 2100000502}
   - {fileID: 941542241}
   - {fileID: 713466305}
   - {fileID: 1479035666}
-  - {fileID: 765328012}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
@@ -4832,7 +4867,7 @@ RectTransform:
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
   m_AnchoredPosition: {x: 300, y: -562}
-  m_SizeDelta: {x: 240, y: 100}
+  m_SizeDelta: {x: 450, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1260112838
 MonoBehaviour:
@@ -7162,6 +7197,7 @@ MonoBehaviour:
     jumpPower: 15
     bgmTrackSource: {fileID: 1260112838}
     bgmHandleSource: {fileID: 1260112838}
+    brightnessIconSprite: {fileID: -2207221798236463320, guid: 1cd497574d0745649a93d7baa7c18510, type: 3}
   blockAvailabilityVersion: 1
   bgmTrackRightOpacity: 0.4
   bgmTrackColor: {r: 0.4392157, g: 0.4392157, b: 0.4392157, a: 1}

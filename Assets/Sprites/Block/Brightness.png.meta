@@ -4,44 +4,10 @@ TextureImporter:
   internalIDToNameTable:
   - first:
       213: 5946004902017328153
-    second: Brightness_0
-  - first:
-      213: 4505288877366437403
-    second: Brightness_1
-  - first:
-      213: 3252164016277709773
-    second: Brightness_2
-  - first:
-      213: 3494028838437643174
-    second: Brightness_3
+    second: BrightnessPalette
   - first:
       213: -2207221798236463320
-    second: Brightness_4
-  - first:
-      213: 1904163173108207106
-    second: Brightness_5
-  - first:
-      213: 5833919116009133586
-    second: Brightness_6
-  - first:
-      213: 4125036740949333601
-    second: Brightness_7
-  - first:
-      213: 78564048153127203
-    second: Brightness_8
-  - first:
-      213: 209274703331103967
-    second: Brightness_9
-  - first:
-      213: 6103426997809456768
-    second: Brightness_10
-  - first:
-      213: 3933992684711002641
-    second: Brightness_11
-  - first:
-      213: 3842994431474446661
-    second: Brightness_12
-  externalObjects: {}
+    second: BrightnessIcon
   serializedVersion: 13
   mipmaps:
     mipMapMode: 0
@@ -149,15 +115,15 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: Brightness_0
+      name: BrightnessPalette
       rect:
         serializedVersion: 2
-        x: 335
-        y: 878
-        width: 169
-        height: 167
+        x: 177
+        y: 137
+        width: 898
+        height: 201
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
@@ -171,81 +137,15 @@ TextureImporter:
       edges: []
       weights: []
     - serializedVersion: 2
-      name: Brightness_1
+      name: BrightnessIcon
       rect:
         serializedVersion: 2
-        x: 496
-        y: 952
-        width: 271
-        height: 194
+        x: 210
+        y: 358
+        width: 843
+        height: 787
       alignment: 0
-      pivot: {x: 0, y: 0}
-      border: {x: 0, y: 0, z: 0, w: 0}
-      customData: 
-      outline: []
-      physicsShape: []
-      tessellationDetail: -1
-      bones: []
-      spriteID: b16e1f92d50068e30800000000000000
-      internalID: 4505288877366437403
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
-    - serializedVersion: 2
-      name: Brightness_2
-      rect:
-        serializedVersion: 2
-        x: 750
-        y: 878
-        width: 170
-        height: 168
-      alignment: 0
-      pivot: {x: 0, y: 0}
-      border: {x: 0, y: 0, z: 0, w: 0}
-      customData: 
-      outline: []
-      physicsShape: []
-      tessellationDetail: -1
-      bones: []
-      spriteID: dc36a8d21f1022d20800000000000000
-      internalID: 3252164016277709773
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
-    - serializedVersion: 2
-      name: Brightness_3
-      rect:
-        serializedVersion: 2
-        x: 209
-        y: 675
-        width: 225
-        height: 180
-      alignment: 0
-      pivot: {x: 0, y: 0}
-      border: {x: 0, y: 0, z: 0, w: 0}
-      customData: 
-      outline: []
-      physicsShape: []
-      tessellationDetail: -1
-      bones: []
-      spriteID: 6a3eb0667b84d7030800000000000000
-      internalID: 3494028838437643174
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
-    - serializedVersion: 2
-      name: Brightness_4
-      rect:
-        serializedVersion: 2
-        x: 447
-        y: 578
-        width: 357
-        height: 356
-      alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
@@ -254,182 +154,6 @@ TextureImporter:
       bones: []
       spriteID: 82fdd97087f5e51e0800000000000000
       internalID: -2207221798236463320
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
-    - serializedVersion: 2
-      name: Brightness_5
-      rect:
-        serializedVersion: 2
-        x: 823
-        y: 695
-        width: 192
-        height: 111
-      alignment: 0
-      pivot: {x: 0, y: 0}
-      border: {x: 0, y: 0, z: 0, w: 0}
-      customData: 
-      outline: []
-      physicsShape: []
-      tessellationDetail: -1
-      bones: []
-      spriteID: 20ece773152fc6a10800000000000000
-      internalID: 1904163173108207106
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
-    - serializedVersion: 2
-      name: Brightness_6
-      rect:
-        serializedVersion: 2
-        x: 368
-        y: 632
-        width: 15
-        height: 12
-      alignment: 0
-      pivot: {x: 0, y: 0}
-      border: {x: 0, y: 0, z: 0, w: 0}
-      customData: 
-      outline: []
-      physicsShape: []
-      tessellationDetail: -1
-      bones: []
-      spriteID: 216d51ec68e36f050800000000000000
-      internalID: 5833919116009133586
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
-    - serializedVersion: 2
-      name: Brightness_7
-      rect:
-        serializedVersion: 2
-        x: 265
-        y: 417
-        width: 239
-        height: 214
-      alignment: 0
-      pivot: {x: 0, y: 0}
-      border: {x: 0, y: 0, z: 0, w: 0}
-      customData: 
-      outline: []
-      physicsShape: []
-      tessellationDetail: -1
-      bones: []
-      spriteID: 16658bd7f031f3930800000000000000
-      internalID: 4125036740949333601
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
-    - serializedVersion: 2
-      name: Brightness_8
-      rect:
-        serializedVersion: 2
-        x: 534
-        y: 377
-        width: 152
-        height: 188
-      alignment: 0
-      pivot: {x: 0, y: 0}
-      border: {x: 0, y: 0, z: 0, w: 0}
-      customData: 
-      outline: []
-      physicsShape: []
-      tessellationDetail: -1
-      bones: []
-      spriteID: 329a846e59d171100800000000000000
-      internalID: 78564048153127203
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
-    - serializedVersion: 2
-      name: Brightness_9
-      rect:
-        serializedVersion: 2
-        x: 750
-        y: 466
-        width: 170
-        height: 164
-      alignment: 0
-      pivot: {x: 0, y: 0}
-      border: {x: 0, y: 0, z: 0, w: 0}
-      customData: 
-      outline: []
-      physicsShape: []
-      tessellationDetail: -1
-      bones: []
-      spriteID: fd49680eb3e77e200800000000000000
-      internalID: 209274703331103967
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
-    - serializedVersion: 2
-      name: Brightness_10
-      rect:
-        serializedVersion: 2
-        x: 176
-        y: 79
-        width: 902
-        height: 333
-      alignment: 0
-      pivot: {x: 0, y: 0}
-      border: {x: 0, y: 0, z: 0, w: 0}
-      customData: 
-      outline: []
-      physicsShape: []
-      tessellationDetail: -1
-      bones: []
-      spriteID: 08626f4648ab3b450800000000000000
-      internalID: 6103426997809456768
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
-    - serializedVersion: 2
-      name: Brightness_11
-      rect:
-        serializedVersion: 2
-        x: 522
-        y: 393
-        width: 8
-        height: 7
-      alignment: 0
-      pivot: {x: 0, y: 0}
-      border: {x: 0, y: 0, z: 0, w: 0}
-      customData: 
-      outline: []
-      physicsShape: []
-      tessellationDetail: -1
-      bones: []
-      spriteID: 1124f29e089589630800000000000000
-      internalID: 3933992684711002641
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
-    - serializedVersion: 2
-      name: Brightness_12
-      rect:
-        serializedVersion: 2
-        x: 526
-        y: 389
-        width: 6
-        height: 7
-      alignment: 0
-      pivot: {x: 0, y: 0}
-      border: {x: 0, y: 0, z: 0, w: 0}
-      customData: 
-      outline: []
-      physicsShape: []
-      tessellationDetail: -1
-      bones: []
-      spriteID: 541b6d9031f055530800000000000000
-      internalID: 3842994431474446661
       vertices: []
       indices: 
       edges: []
@@ -448,19 +172,8 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      Brightness_0: 5946004902017328153
-      Brightness_1: 4505288877366437403
-      Brightness_10: 6103426997809456768
-      Brightness_11: 3933992684711002641
-      Brightness_12: 3842994431474446661
-      Brightness_2: 3252164016277709773
-      Brightness_3: 3494028838437643174
-      Brightness_4: -2207221798236463320
-      Brightness_5: 1904163173108207106
-      Brightness_6: 5833919116009133586
-      Brightness_7: 4125036740949333601
-      Brightness_8: 78564048153127203
-      Brightness_9: 209274703331103967
+      BrightnessPalette: 5946004902017328153
+      BrightnessIcon: -2207221798236463320
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 
