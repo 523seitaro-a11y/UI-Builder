@@ -30,6 +30,7 @@ Unity Hubから、このリポジトリのフォルダーを開いてくださ�
 | MoveL | 押している間、プレイヤーを左へ移動させる |
 | Jump | 接地中のプレイヤーをジャンプさせる |
 | BGMScrollBar | BGM音量を変更する。足場としても使用できる |
+| BrightnessScrollBar | 画面の明るさを変更する。ハンドルに乗って移動できる |
 
 ## シーン構成
 
@@ -38,6 +39,7 @@ Unity Hubから、このリポジトリのフォルダーを開いてくださ�
 | Title | タイトル画面 |
 | StageSelect | ステージ選択画面 |
 | Stage1〜Stage5 | プレイ可能なステージ |
+| Stage10 | 明るさバーギミックの検証用ステージ（固定地形・ルートは暫定） |
 | SandBox | 新しいブロックの開発・動作確認用 |
 
 通常のゲーム用シーンは、以下の順番でBuild Settingsに登録されています。
@@ -49,6 +51,7 @@ Unity Hubから、このリポジトリのフォルダーを開いてくださ�
 5. Stage3
 6. Stage4
 7. Stage5
+8. Stage10
 
 `SandBox`は開発専用のため、Build Settingsには登録していません。
 
@@ -61,6 +64,7 @@ Unity Hubから、このリポジトリのフォルダーを開いてくださ�
 | Stage3 | MoveR、MoveL、Jump |
 | Stage4 | MoveR、MoveL、BGMScrollBar |
 | Stage5 | MoveR、MoveL、Jump、BGMScrollBar |
+| Stage10 | MoveR、Jump、BrightnessScrollBar |
 
 ## 新しいブロックを追加するとき
 
@@ -114,3 +118,5 @@ git diff --stat
 - タイトル画面とステージ選択画面を実装済み
 - unityroom上での動作確認実績あり
 - SandBoxシーンによるブロック開発フローを導入済み
+- Stage10に明るさバーギミックを追加済み
+- Stage10の固定地形と攻略ルートは暫定で、後日変更予定
