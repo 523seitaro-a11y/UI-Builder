@@ -18,6 +18,12 @@ public class MainManager : MonoBehaviour
     [Header("長押し中のRetry表示")]
     [SerializeField] private Sprite retryCursorSprite;
 
+    [Tooltip("長押し開始時、まだ円形変化していない部分の色です。")]
+    [SerializeField] private Color retryBeforeColor = Color.white;
+
+    [Tooltip("長押しが進み、円形変化が完了した部分の色です。")]
+    [SerializeField] private Color retryAfterColor = Color.white;
+
     [Tooltip("画面座標をワールド座標へ変換するカメラです。未設定ならMain Cameraを使用します。")]
     [SerializeField] private Camera pointerCamera;
 
@@ -57,6 +63,8 @@ public class MainManager : MonoBehaviour
     private static readonly int FadedAlphaId = Shader.PropertyToID("_FadedAlpha");
     private static readonly int FillId = Shader.PropertyToID("_Fill");
     private static readonly int UvRectId = Shader.PropertyToID("_UvRect");
+    private static readonly int BeforeColorId = Shader.PropertyToID("_BeforeColor");
+    private static readonly int AfterColorId = Shader.PropertyToID("_AfterColor");
 
     private SpriteRenderer retryCursorRenderer;
     private Material retryCursorMaterial;
@@ -283,6 +291,7 @@ public class MainManager : MonoBehaviour
 
         retryCursorRenderer = retryCursor.AddComponent<SpriteRenderer>();
         retryCursorRenderer.sprite = retryCursorSprite;
+        retryCursorRenderer.color = Color.white;
         retryCursorRenderer.sortingLayerName = retryCursorSortingLayer;
         retryCursorRenderer.sortingOrder = retryCursorSortingOrder;
 
@@ -294,8 +303,14 @@ public class MainManager : MonoBehaviour
                 hideFlags = HideFlags.HideAndDontSave
             };
             retryCursorMaterial.SetFloat(FadedAlphaId, retryFadedAlpha);
+            retryCursorMaterial.SetColor(BeforeColorId, retryBeforeColor);
+            retryCursorMaterial.SetColor(AfterColorId, retryAfterColor);
             SetSpriteUvRect(retryCursorSprite);
             retryCursorRenderer.sharedMaterial = retryCursorMaterial;
+        }
+        else
+        {
+            retryCursorRenderer.color = retryBeforeColor;
         }
 
         retryCursor.SetActive(false);
@@ -346,6 +361,18 @@ public class MainManager : MonoBehaviour
         retryFadedAlpha = Mathf.Clamp01(retryFadedAlpha);
         retryScaleInDuration = Mathf.Max(0f, retryScaleInDuration);
         retryScaleOutDuration = Mathf.Max(0f, retryScaleOutDuration);
+
+        if (retryCursorMaterial != null)
+        {
+            retryCursorMaterial.SetFloat(FadedAlphaId, retryFadedAlpha);
+            retryCursorMaterial.SetColor(BeforeColorId, retryBeforeColor);
+            retryCursorMaterial.SetColor(AfterColorId, retryAfterColor);
+        }
+        else if (retryCursorRenderer != null)
+        {
+            retryCursorRenderer.color = retryBeforeColor;
+        }
+
         FindMissingReferences();
     }
 

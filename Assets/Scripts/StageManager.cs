@@ -105,8 +105,8 @@ public class StageManager : MonoBehaviour
     [SerializeField] private bool useUnscaledGoalTime = true;
 
     [Header("クリック可能時のゴールHover")]
-    [Tooltip("カーソルを合わせている間に表示するGoal1_whiteスプライトです。")]
-    [SerializeField] private Sprite goalHoverSprite;
+    [Tooltip("ゴール到達後にGoal本体へ設定するSorting Orderです。")]
+    [SerializeField] private int goalReachedSortingOrder = short.MaxValue;
 
     [Tooltip("画面下から表示するResultBGです。")]
     [SerializeField] private RectTransform resultBackground;
@@ -200,6 +200,9 @@ public class StageManager : MonoBehaviour
     private Vector3 playerDefaultScale;
     private Vector3 goalDefaultScale;
     private Sprite goalDefaultSprite;
+    private int goalDefaultSortingOrder;
+    private Material goalHoverOutlineMaterial;
+    private SpriteRenderer[] goalHoverOutlineRenderers = Array.Empty<SpriteRenderer>();
     private bool isKeyCollected;
     private bool isRetryTransitionPlaying;
     private bool isGoalClickable;
@@ -207,6 +210,18 @@ public class StageManager : MonoBehaviour
     private bool blockManagerWasEnabled;
     private bool playerWasSimulated;
     private float timeScaleBeforePause = 1f;
+
+    private static readonly Vector2[] GoalHoverOutlineDirections =
+    {
+        Vector2.right,
+        Vector2.left,
+        Vector2.up,
+        Vector2.down,
+        new Vector2(1f, 1f).normalized,
+        new Vector2(1f, -1f).normalized,
+        new Vector2(-1f, 1f).normalized,
+        new Vector2(-1f, -1f).normalized
+    };
 
     private void Awake()
     {
@@ -216,6 +231,7 @@ public class StageManager : MonoBehaviour
         ConfigureStageNavigation();
         ConfigurePlayerLandingPhysics();
         CacheGoalPresentation();
+        CreateGoalHoverOutline();
 
         ConfigurePauseButtons();
         ResetTransitionOverlay();
@@ -325,7 +341,7 @@ public class StageManager : MonoBehaviour
         bool hovered = Input.touchCount == 0 &&
                        !IsPointerOverUi() &&
                        IsPointerOverGoal(Input.mousePosition);
-        SetGoalHoverSprite(hovered);
+        SetGoalHoverOutline(true, hovered);
     }
 
     private async UniTaskVoid RunStageAsync(CancellationToken token)
@@ -389,6 +405,7 @@ public class StageManager : MonoBehaviour
 
                 if (HasReachedGoal())
                 {
+                    SetGoalReachedDepth(true);
                     if (useInteractiveGoalResult)
                     {
                         await PlayInteractiveGoalSequenceAsync(token);
@@ -1169,6 +1186,9 @@ public class StageManager : MonoBehaviour
         playerDefaultScale = player != null ? player.localScale : Vector3.one;
         goalDefaultScale = goal != null ? goal.localScale : Vector3.one;
         goalDefaultSprite = goalSpriteRenderer != null ? goalSpriteRenderer.sprite : null;
+        goalDefaultSortingOrder = goalSpriteRenderer != null
+            ? goalSpriteRenderer.sortingOrder
+            : 0;
     }
 
     private void ResetInteractiveGoalPresentation()
@@ -1197,6 +1217,7 @@ public class StageManager : MonoBehaviour
 
         if (goalSpriteRenderer != null)
         {
+            SetGoalReachedDepth(false);
             RefreshGoalLockPresentation();
         }
     }
@@ -1204,10 +1225,7 @@ public class StageManager : MonoBehaviour
     private void SetGoalClickable(bool clickable)
     {
         isGoalClickable = clickable;
-        if (!clickable)
-        {
-            SetGoalHoverSprite(false);
-        }
+        SetGoalHoverOutline(clickable, false);
     }
 
     private bool IsPointerOverGoal(Vector2 screenPosition)
@@ -1234,19 +1252,119 @@ public class StageManager : MonoBehaviour
     private static bool IsPointerOverUi() =>
         EventSystem.current != null && EventSystem.current.IsPointerOverGameObject();
 
-    private void SetGoalHoverSprite(bool hovered)
+    private void SetGoalReachedDepth(bool reached)
     {
         if (goalSpriteRenderer == null)
         {
             return;
         }
 
-        Sprite targetSprite = hovered && goalHoverSprite != null
-            ? goalHoverSprite
-            : goalClearedSprite;
-        if (targetSprite != null)
+        goalSpriteRenderer.sortingOrder = reached
+            ? goalReachedSortingOrder
+            : goalDefaultSortingOrder;
+    }
+
+    private void CreateGoalHoverOutline()
+    {
+        DestroyGoalHoverOutline();
+        if (goalSpriteRenderer == null)
         {
-            goalSpriteRenderer.sprite = targetSprite;
+            return;
+        }
+
+        Shader outlineShader = blockManager != null
+            ? blockManager.PlayModeHoverOutlineShader
+            : null;
+        outlineShader ??= Shader.Find("UIBuilder/SpriteSolidColor");
+        if (outlineShader != null)
+        {
+            goalHoverOutlineMaterial = new Material(outlineShader)
+            {
+                name = "Goal Hover Outline",
+                hideFlags = HideFlags.HideAndDontSave
+            };
+        }
+
+        goalHoverOutlineRenderers = new SpriteRenderer[GoalHoverOutlineDirections.Length];
+        for (int i = 0; i < goalHoverOutlineRenderers.Length; i++)
+        {
+            GameObject outlineObject = new GameObject($"Goal Hover Outline {i + 1}");
+            outlineObject.layer = goalSpriteRenderer.gameObject.layer;
+            SpriteRenderer outline = outlineObject.AddComponent<SpriteRenderer>();
+            outline.sharedMaterial = goalHoverOutlineMaterial != null
+                ? goalHoverOutlineMaterial
+                : goalSpriteRenderer.sharedMaterial;
+            outlineObject.SetActive(false);
+            goalHoverOutlineRenderers[i] = outline;
+        }
+    }
+
+    private void SetGoalHoverOutline(bool visible, bool hovered)
+    {
+        if (goalSpriteRenderer == null)
+        {
+            return;
+        }
+
+        float outlineWidth = blockManager != null
+            ? blockManager.PlayModeHoverOutlineWidth
+            : 0.06f;
+        Color outlineColor = hovered
+            ? blockManager != null
+                ? blockManager.PlayModeHoverOutlineColor
+                : new Color(1f, 0.5764706f, 0.5803922f, 1f)
+            : Color.white;
+
+        for (int i = 0; i < goalHoverOutlineRenderers.Length; i++)
+        {
+            SpriteRenderer outline = goalHoverOutlineRenderers[i];
+            if (outline == null)
+            {
+                continue;
+            }
+
+            outline.sprite = goalSpriteRenderer.sprite;
+            outline.color = outlineColor;
+            outline.flipX = goalSpriteRenderer.flipX;
+            outline.flipY = goalSpriteRenderer.flipY;
+            outline.drawMode = goalSpriteRenderer.drawMode;
+            outline.size = goalSpriteRenderer.size;
+            outline.maskInteraction = goalSpriteRenderer.maskInteraction;
+            outline.sortingLayerID = goalSpriteRenderer.sortingLayerID;
+            outline.sortingOrder = goalSpriteRenderer.sortingOrder - 1;
+
+            if (visible)
+            {
+                Vector2 offset = GoalHoverOutlineDirections[i] * outlineWidth;
+                Transform sourceTransform = goalSpriteRenderer.transform;
+                outline.transform.position = sourceTransform.position +
+                                             new Vector3(offset.x, offset.y, 0f);
+                outline.transform.rotation = sourceTransform.rotation;
+                outline.transform.localScale = sourceTransform.lossyScale;
+            }
+
+            outline.gameObject.SetActive(
+                visible &&
+                goalSpriteRenderer.enabled &&
+                goalSpriteRenderer.gameObject.activeInHierarchy);
+        }
+    }
+
+    private void DestroyGoalHoverOutline()
+    {
+        foreach (SpriteRenderer outline in goalHoverOutlineRenderers)
+        {
+            if (outline != null)
+            {
+                Destroy(outline.gameObject);
+            }
+        }
+
+        goalHoverOutlineRenderers = Array.Empty<SpriteRenderer>();
+        if (goalHoverOutlineMaterial != null)
+        {
+            Destroy(goalHoverOutlineMaterial);
+            goalHoverOutlineMaterial = null;
         }
     }
 
@@ -1267,6 +1385,10 @@ public class StageManager : MonoBehaviour
         playerAbsorbDuration = Mathf.Max(0f, playerAbsorbDuration);
         goalPopScale = Mathf.Max(1f, goalPopScale);
         goalPopDuration = Mathf.Max(0f, goalPopDuration);
+        goalReachedSortingOrder = Mathf.Clamp(
+            goalReachedSortingOrder,
+            short.MinValue + 1,
+            short.MaxValue);
         resultDisplayDelay = Mathf.Max(0f, resultDisplayDelay);
         resultMoveDuration = Mathf.Max(0f, resultMoveDuration);
         pauseMoveDuration = Mathf.Max(0f, pauseMoveDuration);
@@ -1511,6 +1633,7 @@ public class StageManager : MonoBehaviour
         pauseTween?.Kill();
         playerAbsorbTween?.Kill();
         goalPopTween?.Kill();
+        DestroyGoalHoverOutline();
 
         if (IsPaused)
         {

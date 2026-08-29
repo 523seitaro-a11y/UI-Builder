@@ -21,6 +21,9 @@ public class BlockManager : MonoBehaviour
     public event Action<bool> DragStateChanged;
 
     public bool IsDragging => activePreview != null;
+    public Color PlayModeHoverOutlineColor => playModeHoverOutlineColor;
+    public Shader PlayModeHoverOutlineShader => playModeHoverOutlineShader;
+    public float PlayModeHoverOutlineWidth => playModeHoverOutlineWidth;
     public bool IsBuildMode { get; private set; } = true;
     public int PlacedBlockCount => placedBlocks.Count;
     public bool AllBlocksPlaced
@@ -186,6 +189,9 @@ public class BlockManager : MonoBehaviour
     [Tooltip("BGMScrollBarのTrack全体に使用する色です。右側にはこの色とRight Opacityの両方が適用されます。")]
     [SerializeField] private Color bgmTrackColor = new Color(0.23137257f, 0.23137257f, 0.23137257f, 1f);
 
+    [Tooltip("BGMScrollBarをドラッグ中、配置予定位置の透過表示に使用するSpriteです。")]
+    [SerializeField] private Sprite bgmScrollBarShadowSprite;
+
     [Header("配置範囲")]
     [Tooltip("配置グリッド左下のTilemapセル座標です。")]
     [SerializeField] private Vector2Int placementGridOrigin = new Vector2Int(-9, -4);
@@ -277,6 +283,7 @@ public class BlockManager : MonoBehaviour
     private Texture2D runtimeSolidTexture;
     private Sprite runtimeSolidSprite;
     private PlacedBlock activeBgmScrollBar;
+    private PlacedBlock pressedPlayModeBlock;
     private bool isPlayerAttachedToBgmHandle;
     private Vector2 playerBgmHandleOffset;
     private bool hasBgmScrollBarResetVolume;
@@ -297,6 +304,7 @@ public class BlockManager : MonoBehaviour
     private BlockDefinition activeDefinition;
     private GameObject activePreview;
     private GameObject activeGridPreview;
+    private bool activeGridPreviewUsesBgmShadow;
     private PlacedBlock activePlacedBlock;
     private Vector3Int activeCell;
     private bool activeCellIsValid;
@@ -599,7 +607,7 @@ public class BlockManager : MonoBehaviour
     {
         activeDefinition = definition;
         activePreview = preview;
-        activeGridPreview = Instantiate(definition.worldTemplate, placedBlockParent);
+        activeGridPreview = CreateGridPreview(definition);
         activeGridPreview.name = $"{activePreview.name} (Grid Preview)";
 
         if (IsScrollBar(definition))
@@ -616,6 +624,36 @@ public class BlockManager : MonoBehaviour
         hasLastCursorSoundCell = false;
         SetRotationDragPopVisible(CanRotate(definition));
         DragStateChanged?.Invoke(true);
+    }
+
+    private GameObject CreateGridPreview(BlockDefinition definition)
+    {
+        activeGridPreviewUsesBgmShadow = definition.isBgmScrollBar &&
+                                         bgmScrollBarShadowSprite != null;
+        if (!activeGridPreviewUsesBgmShadow)
+        {
+            return Instantiate(definition.worldTemplate, placedBlockParent);
+        }
+
+        GameObject shadow = new GameObject("BGMScrollBar Shadow");
+        shadow.layer = activePreview != null ? activePreview.layer : gameObject.layer;
+        shadow.transform.SetParent(placedBlockParent, false);
+        SpriteRenderer shadowRenderer = shadow.AddComponent<SpriteRenderer>();
+        shadowRenderer.sprite = bgmScrollBarShadowSprite;
+        return shadow;
+    }
+
+    private void ApplyActiveBgmGridPreviewOrientation(bool isVertical)
+    {
+        if (!activeGridPreviewUsesBgmShadow)
+        {
+            ApplyBgmOrientation(activeGridPreview, isVertical);
+            return;
+        }
+
+        activeGridPreview.transform.localRotation = isVertical
+            ? Quaternion.Euler(0f, 0f, 90f)
+            : Quaternion.identity;
     }
 
     private void ToggleActiveBgmOrientation()
@@ -916,6 +954,7 @@ public class BlockManager : MonoBehaviour
         EndPlacedBlockOperation();
         StopBgmHandlePlayerMotion();
         activeBgmScrollBar = null;
+        pressedPlayModeBlock = null;
         isPlayerAttachedToBgmHandle = false;
         HideAllPlayModeHoverOutlines();
         IsBuildMode = isBuildMode;
@@ -1606,7 +1645,7 @@ public class BlockManager : MonoBehaviour
     {
         foreach (PlacedBlock block in placedBlocks)
         {
-            bool isOperating = false;
+            bool isOperating = block == activeBgmScrollBar;
             foreach (IBlockOperationState state in block.operationStates)
             {
                 if (state.IsOperating)
@@ -1622,33 +1661,36 @@ public class BlockManager : MonoBehaviour
 
     private void UpdatePlayModeHoverOutline()
     {
+        bool hasPointer = TryGetPointerState(out Vector2 screenPosition, out PointerPhase phase);
+        bool isPointerHeld = hasPointer &&
+                             (phase == PointerPhase.Began || phase == PointerPhase.Held);
+
+        if (isPointerHeld)
+        {
+            if (pressedPlayModeBlock == null && !IsPointerOverUi())
+            {
+                pressedPlayModeBlock = activeBgmScrollBar ?? FindPlacedBlock(screenPosition);
+            }
+        }
+        else
+        {
+            pressedPlayModeBlock = null;
+        }
+
         bool allowHover = showPlayModeHoverOutline &&
+                          !isPointerHeld &&
                           Input.touchCount == 0 &&
-                          !Input.GetMouseButton(0) &&
                           !IsPointerOverUi();
-        PlacedBlock hoveredBlock = allowHover
-            ? FindPlacedBlock(Input.mousePosition)
-            : null;
+        PlacedBlock outlinedBlock = isPointerHeld
+            ? pressedPlayModeBlock
+            : allowHover
+                ? FindPlacedBlock(Input.mousePosition)
+                : null;
 
         foreach (PlacedBlock block in placedBlocks)
         {
-            SetPlayModeHoverOutline(
-                block,
-                block == hoveredBlock && !IsBlockOperating(block));
+            SetPlayModeHoverOutline(block, block == outlinedBlock);
         }
-    }
-
-    private static bool IsBlockOperating(PlacedBlock block)
-    {
-        foreach (IBlockOperationState state in block.operationStates)
-        {
-            if (state.IsOperating)
-            {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     private void CreatePlayModeHoverOutlines(PlacedBlock block)
@@ -1804,11 +1846,19 @@ public class BlockManager : MonoBehaviour
 
         for (int i = 0; i < block.renderers.Length; i++)
         {
+            SpriteRenderer renderer = block.renderers[i];
+            if (block.definition.isBgmScrollBar &&
+                (renderer == block.bgmTrackRenderer ||
+                 renderer == block.bgmTrackRightRenderer))
+            {
+                continue;
+            }
+
             Color color = block.baseColors[i];
-            block.renderers[i].sharedMaterial = inverted && operationInversionMaterial != null
+            renderer.sharedMaterial = inverted && operationInversionMaterial != null
                 ? operationInversionMaterial
                 : block.baseMaterials[i];
-            block.renderers[i].color = inverted && operationInversionMaterial == null
+            renderer.color = inverted && operationInversionMaterial == null
                 ? new Color(1f - color.r, 1f - color.g, 1f - color.b, color.a)
                 : color;
         }
@@ -2469,6 +2519,7 @@ public class BlockManager : MonoBehaviour
         EndPlacedBlockOperation();
         StopBgmHandlePlayerMotion();
         activeBgmScrollBar = null;
+        pressedPlayModeBlock = null;
         isPlayerAttachedToBgmHandle = false;
         HideAllPlayModeHoverOutlines();
 
@@ -2524,6 +2575,7 @@ public class BlockManager : MonoBehaviour
         activeDefinition = null;
         activePreview = null;
         activeGridPreview = null;
+        activeGridPreviewUsesBgmShadow = false;
         activePlacedBlock = null;
         activeCellIsValid = false;
         hasLastCursorSoundCell = false;

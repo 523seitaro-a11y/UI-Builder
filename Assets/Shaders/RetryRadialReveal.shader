@@ -4,6 +4,8 @@ Shader "UIBuilder/RetryRadialReveal"
     {
         [PerRendererData] _MainTex ("Sprite Texture", 2D) = "white" {}
         _Color ("Tint", Color) = (1,1,1,1)
+        _BeforeColor ("Before Color", Color) = (1,1,1,1)
+        _AfterColor ("After Color", Color) = (1,1,1,1)
         [Range(0,1)] _FadedAlpha ("Faded Alpha", Float) = 0.2
         [Range(0,1)] _Fill ("Clockwise Fill", Float) = 0
         [HideInInspector] _UvRect ("Sprite UV Rect", Vector) = (0,0,1,1)
@@ -42,6 +44,8 @@ Shader "UIBuilder/RetryRadialReveal"
             float _FadedAlpha;
             float _Fill;
             float4 _UvRect;
+            fixed4 _BeforeColor;
+            fixed4 _AfterColor;
 
             fixed4 RetryRadialFrag(v2f input) : SV_Target
             {
@@ -55,6 +59,7 @@ Shader "UIBuilder/RetryRadialReveal"
                 float radialPosition = angle / 6.28318530718;
                 float revealed = step(radialPosition, _Fill);
 
+                color *= lerp(_BeforeColor, _AfterColor, revealed);
                 color.a *= lerp(_FadedAlpha, 1.0, revealed);
                 color.rgb *= color.a;
                 return color;
