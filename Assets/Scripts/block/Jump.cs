@@ -68,6 +68,7 @@ public class Jump : MonoBehaviour, BlockManager.IBlockOperationState
         // Impulseを使い、クリックした瞬間に上向きの力を加えます。
         isJumping = true;
         playerBody.AddForce(Vector2.up * jumpPower, ForceMode2D.Impulse);
+        AudioManager.Instance?.PlayJumpSound();
     }
 
     private void FixedUpdate()

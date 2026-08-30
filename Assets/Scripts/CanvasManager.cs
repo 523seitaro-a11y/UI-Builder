@@ -194,7 +194,21 @@ public class CanvasManager : MonoBehaviour
     /// </summary>
     public void ToggleUpperPanel()
     {
+        bool wasRaised = ShouldRaisePanel;
         isManuallyRaised = !isManuallyRaised;
+        bool raisePanel = ShouldRaisePanel;
+
+        if (wasRaised != raisePanel)
+        {
+            if (raisePanel)
+            {
+                AudioManager.Instance?.PlayUpperPanelRaiseSound();
+            }
+            else
+            {
+                AudioManager.Instance?.PlayUpperPanelLowerSound();
+            }
+        }
         SetPanelPosition(ShouldRaisePanel, true);
     }
 

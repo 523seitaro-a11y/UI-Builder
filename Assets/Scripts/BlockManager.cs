@@ -133,6 +133,7 @@ public class BlockManager : MonoBehaviour
         public float bgmMaximumVolume;
         public bool isBgmVertical;
         public BrightnessVisibilityVisual brightnessVisibilityVisual;
+        public bool suppressNextBuildHoverSound;
     }
 
     private sealed class BrightnessVisibilityVisual
@@ -310,6 +311,9 @@ public class BlockManager : MonoBehaviour
     private bool activeCellIsValid;
     private Vector3Int lastCursorSoundCell;
     private bool hasLastCursorSoundCell;
+    private bool suppressNextCursorSound;
+    private PlacedBlock hoveredPlacedBlockForSound;
+    private BlockDefinition hoveredSourceBlockForSound;
 
     private void Awake()
     {
@@ -479,6 +483,22 @@ public class BlockManager : MonoBehaviour
         PlacedBlock hovered = allowHover && activePreview == null
             ? FindPlacedBlockForBuildMode(screenPosition)
             : null;
+        if (hovered != hoveredPlacedBlockForSound)
+        {
+            hoveredPlacedBlockForSound = hovered;
+            if (hovered != null)
+            {
+                if (hovered.suppressNextBuildHoverSound)
+                {
+                    hovered.suppressNextBuildHoverSound = false;
+                }
+                else
+                {
+                AudioManager.Instance?.PlayBlockHoverSound();
+                }
+            }
+        }
+
         float interpolation = placedHoverScaleSpeed <= 0f
             ? 1f
             : 1f - Mathf.Exp(-placedHoverScaleSpeed * Time.unscaledDeltaTime);
@@ -501,6 +521,7 @@ public class BlockManager : MonoBehaviour
 
     private void UpdateSourceHover(Vector2 screenPosition, bool allowHover)
     {
+        BlockDefinition hoveredBlock = null;
         float interpolation = sourceHoverScaleSpeed <= 0f
             ? 1f
             : 1f - Mathf.Exp(-sourceHoverScaleSpeed * Time.unscaledDeltaTime);
@@ -520,6 +541,11 @@ public class BlockManager : MonoBehaviour
                                  GetUiCamera(block.dragSource));
             Vector3 targetScale = block.sourceBaseScale *
                                   (isHovered ? Mathf.Max(1f, sourceHoverScaleMultiplier) : 1f);
+            if (isHovered)
+            {
+                hoveredBlock = block;
+            }
+
             Transform sourceTransform = GetSourceTransform(block);
             Vector3 nextScale = Vector3.Lerp(
                 sourceTransform.localScale,
@@ -536,7 +562,18 @@ public class BlockManager : MonoBehaviour
                     block.sourceBaseLocalPosition + centerCompensation;
             }
         }
+
+        if (hoveredBlock != hoveredSourceBlockForSound)
+        {
+            hoveredSourceBlockForSound = hoveredBlock;
+            if (hoveredBlock != null)
+            {
+                AudioManager.Instance?.PlayBlockHoverSound();
+            }
+        }
     }
+
+
 
     private bool TryBeginDrag(Vector2 screenPosition)
     {
@@ -622,7 +659,9 @@ public class BlockManager : MonoBehaviour
         activePreview.SetActive(true);
         activeGridPreview.SetActive(true);
         hasLastCursorSoundCell = false;
+        suppressNextCursorSound = true;
         SetRotationDragPopVisible(CanRotate(definition));
+        AudioManager.Instance?.PlayBlockPickupSound();
         DragStateChanged?.Invoke(true);
     }
 
@@ -880,6 +919,14 @@ public class BlockManager : MonoBehaviour
             return;
         }
 
+        if (suppressNextCursorSound)
+        {
+            lastCursorSoundCell = cell;
+            hasLastCursorSoundCell = true;
+            suppressNextCursorSound = false;
+            return;
+        }
+
         if (hasLastCursorSoundCell && cell == lastCursorSoundCell)
         {
             return;
@@ -892,9 +939,22 @@ public class BlockManager : MonoBehaviour
 
     private void EndDrag()
     {
+        if (!activeCellIsValid)
+        {
+            AudioManager.Instance?.PlayInvalidPlacementSound();
+        }
+
         if (activeCellIsValid)
         {
             PlaceActiveBlock(activeCell);
+            PlacedBlock placedBlock = activePlacedBlock ??
+                                      (placedBlocks.Count > 0 ? placedBlocks[placedBlocks.Count - 1] : null);
+            if (placedBlock != null)
+            {
+                placedBlock.suppressNextBuildHoverSound = true;
+            }
+
+            AudioManager.Instance?.PlayBlockPlacementSound();
         }
         else if (activePlacedBlock != null)
         {
@@ -2534,6 +2594,8 @@ public class BlockManager : MonoBehaviour
         pressedPlayModeBlock = null;
         isPlayerAttachedToBgmHandle = false;
         HideAllPlayModeHoverOutlines();
+        hoveredPlacedBlockForSound = null;
+        hoveredSourceBlockForSound = null;
 
         if (activePreview != null)
         {
@@ -2591,6 +2653,7 @@ public class BlockManager : MonoBehaviour
         activePlacedBlock = null;
         activeCellIsValid = false;
         hasLastCursorSoundCell = false;
+        suppressNextCursorSound = false;
         previewRenderers.Clear();
         previewOriginalColors.Clear();
         previewColliders.Clear();

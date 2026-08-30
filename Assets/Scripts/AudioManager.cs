@@ -27,6 +27,51 @@ public sealed class AudioManager : MonoBehaviour
     [Range(0f, 1f)]
     [SerializeField] private float cursorVolume = 1f;
 
+    [Tooltip("ブロックを有効なセルへ設置したときに再生する音です。")]
+    [SerializeField] private AudioClip blockPlacementClip;
+    [Range(0f, 1f)]
+    [SerializeField] private float blockPlacementVolume = 1f;
+
+    [Tooltip("ブロックをつかんでドラッグを開始したときに再生する音です。")]
+    [SerializeField] private AudioClip blockPickupClip;
+    [Range(0f, 1f)]
+    [SerializeField] private float blockPickupVolume = 1f;
+
+    [Tooltip("ブロックを置けない場所でドロップしたときに再生する音です。")]
+    [SerializeField] private AudioClip invalidPlacementClip;
+    [Range(0f, 1f)]
+    [SerializeField] private float invalidPlacementVolume = 1f;
+
+    [Tooltip("ビルドモード中、ブロックへカーソルが入ったときに再生する音です。")]
+    [SerializeField] private AudioClip blockHoverClip;
+    [Range(0f, 1f)]
+    [SerializeField] private float blockHoverVolume = 1f;
+
+    [Tooltip("上部ブロックパネルが上がるときに再生する音です。")]
+    [SerializeField] private AudioClip upperPanelRaiseClip;
+    [Range(0f, 1f)]
+    [SerializeField] private float upperPanelRaiseVolume = 1f;
+
+    [Tooltip("上部ブロックパネルが下がるときに再生する音です。")]
+    [SerializeField] private AudioClip upperPanelLowerClip;
+    [Range(0f, 1f)]
+    [SerializeField] private float upperPanelLowerVolume = 1f;
+
+    [Tooltip("ゲームがビルドモードからプレイモードへ切り替わったときに再生する音です。")]
+    [SerializeField] private AudioClip gameStartClip;
+    [Range(0f, 1f)]
+    [SerializeField] private float gameStartVolume = 1f;
+
+    [Tooltip("プレイモード中、接地したプレイヤーがジャンプしたときに再生する音です。")]
+    [SerializeField] private AudioClip jumpClip;
+    [Range(0f, 1f)]
+    [SerializeField] private float jumpVolume = 1f;
+
+    [Tooltip("プレイヤーが死亡した瞬間に再生する音です。")]
+    [SerializeField] private AudioClip deathClip;
+    [Range(0f, 1f)]
+    [SerializeField] private float deathVolume = 1f;
+
     private AudioSource audioSource;
     private AudioSource cursorAudioSource;
 
@@ -54,8 +99,12 @@ public sealed class AudioManager : MonoBehaviour
         cursorAudioSource.spatialBlend = 0f;
         cursorAudioSource.volume = 1f;
         cursorAudioSource.priority = 0;
-
         ApplyAudioSourceSettings();
+
+        if (deathClip != null && deathClip.loadState == AudioDataLoadState.Unloaded)
+        {
+            deathClip.LoadAudioData();
+        }
     }
 
     private void Start()
@@ -89,6 +138,96 @@ public sealed class AudioManager : MonoBehaviour
         cursorAudioSource.PlayOneShot(cursorClip, cursorVolume);
     }
 
+    public void PlayBlockPlacementSound()
+    {
+        if (cursorAudioSource == null || blockPlacementClip == null)
+        {
+            return;
+        }
+
+        cursorAudioSource.PlayOneShot(blockPlacementClip, blockPlacementVolume);
+    }
+
+    public void PlayBlockPickupSound()
+    {
+        if (cursorAudioSource == null || blockPickupClip == null)
+        {
+            return;
+        }
+
+        cursorAudioSource.PlayOneShot(blockPickupClip, blockPickupVolume);
+    }
+
+    public void PlayInvalidPlacementSound()
+    {
+        if (cursorAudioSource == null || invalidPlacementClip == null)
+        {
+            return;
+        }
+
+        cursorAudioSource.PlayOneShot(invalidPlacementClip, invalidPlacementVolume);
+    }
+
+    public void PlayBlockHoverSound()
+    {
+        if (cursorAudioSource == null || blockHoverClip == null)
+        {
+            return;
+        }
+
+        cursorAudioSource.PlayOneShot(blockHoverClip, blockHoverVolume);
+    }
+
+    public void PlayUpperPanelRaiseSound()
+    {
+        if (cursorAudioSource == null || upperPanelRaiseClip == null)
+        {
+            return;
+        }
+
+        cursorAudioSource.PlayOneShot(upperPanelRaiseClip, upperPanelRaiseVolume);
+    }
+
+    public void PlayUpperPanelLowerSound()
+    {
+        if (cursorAudioSource == null || upperPanelLowerClip == null)
+        {
+            return;
+        }
+
+        cursorAudioSource.PlayOneShot(upperPanelLowerClip, upperPanelLowerVolume);
+    }
+
+    public void PlayGameStartSound()
+    {
+        if (cursorAudioSource == null || gameStartClip == null)
+        {
+            return;
+        }
+
+        cursorAudioSource.PlayOneShot(gameStartClip, gameStartVolume);
+    }
+
+    public void PlayJumpSound()
+    {
+        if (cursorAudioSource == null || jumpClip == null)
+        {
+            return;
+        }
+
+        cursorAudioSource.PlayOneShot(jumpClip, jumpVolume);
+    }
+
+    public void PlayDeathSound()
+    {
+        if (cursorAudioSource == null || deathClip == null)
+        {
+            return;
+        }
+
+        cursorAudioSource.PlayOneShot(deathClip, deathVolume);
+    }
+
     public void SetBgmVolume(float volume)
     {
         bgmVolume = Mathf.Clamp01(volume);
@@ -119,11 +258,25 @@ public sealed class AudioManager : MonoBehaviour
     {
         bgmVolume = Mathf.Clamp01(bgmVolume);
         cursorVolume = Mathf.Clamp01(cursorVolume);
+        blockPlacementVolume = Mathf.Clamp01(blockPlacementVolume);
+        blockPickupVolume = Mathf.Clamp01(blockPickupVolume);
+        invalidPlacementVolume = Mathf.Clamp01(invalidPlacementVolume);
+        blockHoverVolume = Mathf.Clamp01(blockHoverVolume);
+        upperPanelRaiseVolume = Mathf.Clamp01(upperPanelRaiseVolume);
+        upperPanelLowerVolume = Mathf.Clamp01(upperPanelLowerVolume);
+        gameStartVolume = Mathf.Clamp01(gameStartVolume);
+        jumpVolume = Mathf.Clamp01(jumpVolume);
+        deathVolume = Mathf.Clamp01(deathVolume);
         if (TryGetComponent(out AudioSource source))
         {
             audioSource = source;
-            ApplyAudioSourceSettings();
+        ApplyAudioSourceSettings();
+
+        if (deathClip != null && deathClip.loadState == AudioDataLoadState.Unloaded)
+        {
+            deathClip.LoadAudioData();
         }
+    }
     }
 
     private void OnDestroy()

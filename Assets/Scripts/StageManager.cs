@@ -11,6 +11,8 @@ using UnityEngine.UI;
 
 public class StageManager : MonoBehaviour
 {
+    private const float ClosedDeathIrisRadius = -0.01f;
+
     public enum StageMode
     {
         Build,
@@ -78,6 +80,30 @@ public class StageManager : MonoBehaviour
 
     [Tooltip("プレイヤーとの接触判定に使用する鍵のCollider2Dです。")]
     [SerializeField] private Collider2D keyCollider;
+
+    [Tooltip("鍵のフェード表示に使用するSpriteRendererです。")]
+    [SerializeField] private SpriteRenderer keySpriteRenderer;
+
+    [Header("鍵アニメーション")]
+    [Tooltip("待機中に鍵が上下する片側の距離です。")]
+    [Min(0f)]
+    [SerializeField] private float keyFloatDistance = 0.12f;
+
+    [Tooltip("鍵が中央から上端へ移動する時間です。")]
+    [Min(0.01f)]
+    [SerializeField] private float keyFloatHalfDuration = 0.8f;
+
+    [SerializeField] private Ease keyFloatEase = Ease.InOutSine;
+
+    [Tooltip("獲得時に鍵が拡大する倍率です。")]
+    [Min(1f)]
+    [SerializeField] private float keyCollectScale = 1.5f;
+
+    [Tooltip("獲得時の拡大とフェードアウトにかける時間です。")]
+    [Min(0f)]
+    [SerializeField] private float keyCollectDuration = 0.25f;
+
+    [SerializeField] private Ease keyCollectEase = Ease.OutCubic;
 
     [Tooltip("鍵を取得するまでゴールに表示するRock0スプライトです。")]
     [SerializeField] private Sprite goalLockedSprite;
@@ -159,6 +185,44 @@ public class StageManager : MonoBehaviour
     [Tooltip("プレイヤーが触れると開始位置からやり直すTilemapを指定します。複数指定できます。")]
     [SerializeField] private Tilemap[] retryTilemaps = Array.Empty<Tilemap>();
 
+    [Header("死亡アニメーション")]
+    [Tooltip("通常時と死亡時の見た目を切り替えるSpriteRendererです。")]
+    [SerializeField] private SpriteRenderer playerSpriteRenderer;
+
+    [Tooltip("死亡判定の瞬間に表示するplayer_deadスプライトです。")]
+    [SerializeField] private Sprite playerDeadSprite;
+
+    [Tooltip("画面を円形に閉じるUIBuilder/DeathIrisシェーダーです。")]
+    [SerializeField] private Shader deathIrisShader;
+
+    [Tooltip("死亡時のアイリスを覆う色です。既定値は#3C3C3Cです。")]
+    [SerializeField] private Color deathIrisColor = new Color(60f / 255f, 60f / 255f, 60f / 255f, 1f);
+
+    [Min(0f)]
+    [SerializeField] private float deathIrisCloseDuration = 0.45f;
+
+    [Tooltip("アイリスが完全に閉じ、画面全体が#3C3C3Cのまま停止する時間です。")]
+    [InspectorName("画面全体が3C3C3Cの時間")]
+    [Min(0f)]
+    [SerializeField] private float deathIrisClosedDuration = 0.12f;
+
+    [Min(0f)]
+    [SerializeField] private float deathIrisOpenDuration = 0.45f;
+
+    [SerializeField] private Ease deathIrisCloseEase = Ease.InCubic;
+    [SerializeField] private Ease deathIrisOpenEase = Ease.OutCubic;
+    [SerializeField] private bool useUnscaledDeathTime = true;
+
+    [Tooltip("player_deadへ切り替わった瞬間の拡大率です。")]
+    [Min(1f)]
+    [SerializeField] private float deathPopScale = 1.15f;
+
+    [Tooltip("拡大したプレイヤーが通常サイズへ戻る時間です。")]
+    [Min(0f)]
+    [SerializeField] private float deathPopDuration = 0.12f;
+
+    [SerializeField] private Ease deathPopEase = Ease.OutCubic;
+
     [Header("ゲーム開始時の画面遷移")]
     [Tooltip("画面全体を覆う黒いUIです。")]
     [SerializeField] private RectTransform transitionOverlay;
@@ -190,18 +254,27 @@ public class StageManager : MonoBehaviour
     public bool IsPaused { get; private set; }
 
     private Tweener transitionTween;
+    private Tweener deathIrisTween;
+    private Tweener deathPopTween;
     private Tweener resultTween;
     private Tweener pauseTween;
     private Collider2D[] retryTilemapColliders = Array.Empty<Collider2D>();
     private Sequence playerAbsorbTween;
     private Sequence goalPopTween;
+    private Sequence keyFloatTween;
+    private Sequence keyCollectTween;
     private Vector2 resultHiddenPosition;
     private Vector2 pauseHiddenPosition;
     private Vector3 playerDefaultScale;
+    private Sprite playerDefaultSprite;
+    private Vector3 keyDefaultScale;
+    private Color keyDefaultColor = Color.white;
     private Vector3 goalDefaultScale;
     private Sprite goalDefaultSprite;
     private int goalDefaultSortingOrder;
     private Material goalHoverOutlineMaterial;
+    private Material deathIrisMaterial;
+    private Material transitionDefaultMaterial;
     private SpriteRenderer[] goalHoverOutlineRenderers = Array.Empty<SpriteRenderer>();
     private bool isKeyCollected;
     private bool isRetryTransitionPlaying;
@@ -230,6 +303,8 @@ public class StageManager : MonoBehaviour
         ApplyStageInformation();
         ConfigureStageNavigation();
         ConfigurePlayerLandingPhysics();
+        CacheDeathPresentation();
+        CacheKeyPresentation();
         CacheGoalPresentation();
         CreateGoalHoverOutline();
 
@@ -378,6 +453,7 @@ public class StageManager : MonoBehaviour
             {
                 return;
             }
+            AudioManager.Instance?.PlayGameStartSound();
 
             canceled = await PlayGameStartTransitionAsync(token);
             if (canceled)
@@ -418,7 +494,10 @@ public class StageManager : MonoBehaviour
                     return;
                 }
 
-                RetryPlayer();
+                if (await PlayDeathAndRestartAsync(token))
+                {
+                    return;
+                }
             }
         }
     }
@@ -805,6 +884,305 @@ public class StageManager : MonoBehaviour
         Physics2D.SyncTransforms();
     }
 
+    /// <summary>
+    /// プレイヤーを停止して死亡表示へ切り替え、暗転中に開始位置へ戻してから再開します。
+    /// trueは処理がキャンセルされたことを表します。
+    /// </summary>
+    private async UniTask<bool> PlayDeathAndRestartAsync(CancellationToken token)
+    {
+        AudioManager.Instance?.PlayDeathSound();
+        StopPlayerForDeath();
+        SetPlayerSprite(playerDeadSprite);
+        PlayDeathPopAnimation();
+
+        if (!PrepareDeathIris(GetPlayerIrisCenter(), out float closeStartRadius))
+        {
+            RetryPlayer();
+            RestorePlayerAfterDeath();
+            return false;
+        }
+
+        try
+        {
+            SetDeathIrisRadius(closeStartRadius);
+            if (await TweenDeathIrisRadiusAsync(
+                    ClosedDeathIrisRadius,
+                    deathIrisCloseDuration,
+                    deathIrisCloseEase,
+                    token))
+            {
+                return true;
+            }
+
+            bool canceled = await UniTask.Delay(
+                    TimeSpan.FromSeconds(deathIrisClosedDuration),
+                    ignoreTimeScale: useUnscaledDeathTime,
+                    cancellationToken: token)
+                .SuppressCancellationThrow();
+            if (canceled)
+            {
+                return true;
+            }
+
+            // 完全に暗くなっている間に開始位置へ戻します。
+            RetryPlayer();
+            SetPlayerSprite(playerDefaultSprite);
+            SetDeathIrisCenter(GetPlayerIrisCenter());
+
+            if (await TweenDeathIrisRadiusAsync(
+                    GetDeathIrisMaxRadius(),
+                    deathIrisOpenDuration,
+                    deathIrisOpenEase,
+                    token))
+            {
+                return true;
+            }
+
+            return false;
+        }
+        finally
+        {
+            deathIrisTween?.Kill();
+            deathIrisTween = null;
+            RestoreTransitionAfterDeath();
+            RestorePlayerAfterDeath();
+        }
+    }
+
+    private void StopPlayerForDeath()
+    {
+        if (playerBody == null)
+        {
+            return;
+        }
+
+        playerBody.linearVelocity = Vector2.zero;
+        playerBody.angularVelocity = 0f;
+        playerBody.simulated = false;
+    }
+
+    private void RestorePlayerAfterDeath()
+    {
+        deathPopTween?.Kill();
+        deathPopTween = null;
+        SetPlayerSprite(playerDefaultSprite);
+
+        if (player != null)
+        {
+            player.localScale = playerDefaultScale;
+        }
+
+        if (playerBody != null && CurrentMode == StageMode.Play)
+        {
+            playerBody.linearVelocity = Vector2.zero;
+            playerBody.angularVelocity = 0f;
+            playerBody.simulated = true;
+        }
+    }
+
+    private void SetPlayerSprite(Sprite sprite)
+    {
+        if (playerSpriteRenderer != null && sprite != null)
+        {
+            playerSpriteRenderer.sprite = sprite;
+        }
+    }
+
+    private void PlayDeathPopAnimation()
+    {
+        if (player == null)
+        {
+            return;
+        }
+
+        deathPopTween?.Kill();
+        player.localScale = playerDefaultScale * deathPopScale;
+
+        if (deathPopDuration <= 0f)
+        {
+            player.localScale = playerDefaultScale;
+            return;
+        }
+
+        deathPopTween = player
+            .DOScale(playerDefaultScale, deathPopDuration)
+            .SetEase(deathPopEase)
+            .SetUpdate(useUnscaledDeathTime)
+            .OnComplete(() => deathPopTween = null);
+    }
+
+    private void CacheDeathPresentation()
+    {
+        playerDefaultSprite = playerSpriteRenderer != null
+            ? playerSpriteRenderer.sprite
+            : null;
+        transitionDefaultMaterial = transitionImage != null
+            ? transitionImage.material
+            : null;
+
+        deathIrisShader ??= Shader.Find("UIBuilder/DeathIris");
+        if (deathIrisShader != null)
+        {
+            deathIrisMaterial = new Material(deathIrisShader)
+            {
+                name = "Death Iris (Runtime)",
+                hideFlags = HideFlags.HideAndDontSave
+            };
+        }
+    }
+
+    private bool PrepareDeathIris(Vector2 center, out float maxRadius)
+    {
+        maxRadius = 0f;
+        if (transitionOverlay == null || transitionImage == null || deathIrisMaterial == null)
+        {
+            return false;
+        }
+
+        transitionOverlay.anchoredPosition = Vector2.zero;
+        transitionOverlay.gameObject.SetActive(true);
+        transitionOverlay.SetAsLastSibling();
+        transitionImage.material = deathIrisMaterial;
+        transitionImage.color = Color.white;
+        Canvas.ForceUpdateCanvases();
+
+        Rect rect = transitionOverlay.rect;
+        deathIrisMaterial.SetColor("_Color", deathIrisColor);
+        deathIrisMaterial.SetFloat(
+            "_Aspect",
+            rect.height > 0f ? rect.width / rect.height : 1f);
+        SetDeathIrisCenter(center);
+        maxRadius = GetDeathIrisMaxRadius();
+        return true;
+    }
+
+    private Vector2 GetPlayerIrisCenter()
+    {
+        if (player == null || transitionOverlay == null)
+        {
+            return new Vector2(0.5f, 0.5f);
+        }
+
+        Camera worldCamera = Camera.main != null
+            ? Camera.main
+            : FindFirstObjectByType<Camera>();
+        Vector2 screenPoint = RectTransformUtility.WorldToScreenPoint(
+            worldCamera,
+            player.position);
+
+        Canvas canvas = transitionOverlay.GetComponentInParent<Canvas>();
+        Camera uiCamera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay
+            ? canvas.worldCamera
+            : null;
+
+        if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                transitionOverlay,
+                screenPoint,
+                uiCamera,
+                out Vector2 localPoint))
+        {
+            return new Vector2(0.5f, 0.5f);
+        }
+
+        Rect rect = transitionOverlay.rect;
+        return new Vector2(
+            Mathf.InverseLerp(rect.xMin, rect.xMax, localPoint.x),
+            Mathf.InverseLerp(rect.yMin, rect.yMax, localPoint.y));
+    }
+
+    private void SetDeathIrisCenter(Vector2 center)
+    {
+        deathIrisMaterial?.SetVector("_Center", center);
+    }
+
+    private void SetDeathIrisRadius(float radius)
+    {
+        deathIrisMaterial?.SetFloat("_Radius", radius);
+    }
+
+    private float GetDeathIrisMaxRadius()
+    {
+        if (deathIrisMaterial == null)
+        {
+            return 1f;
+        }
+
+        Vector4 centerValue = deathIrisMaterial.GetVector("_Center");
+        Vector2 center = new Vector2(centerValue.x, centerValue.y);
+        float aspect = Mathf.Max(
+            0.0001f,
+            deathIrisMaterial.GetFloat("_Aspect"));
+        float maxRadius = 0f;
+
+        Vector2[] corners =
+        {
+            Vector2.zero,
+            Vector2.right,
+            Vector2.up,
+            Vector2.one
+        };
+
+        foreach (Vector2 corner in corners)
+        {
+            Vector2 delta = corner - center;
+            delta.x *= aspect;
+            maxRadius = Mathf.Max(maxRadius, delta.magnitude);
+        }
+
+        return maxRadius + 0.01f;
+    }
+
+    private async UniTask<bool> TweenDeathIrisRadiusAsync(
+        float targetRadius,
+        float duration,
+        Ease ease,
+        CancellationToken token)
+    {
+        deathIrisTween?.Kill();
+
+        if (duration <= 0f)
+        {
+            SetDeathIrisRadius(targetRadius);
+            return false;
+        }
+
+        deathIrisTween = DOTween.To(
+                () => deathIrisMaterial.GetFloat("_Radius"),
+                SetDeathIrisRadius,
+                targetRadius,
+                duration)
+            .SetEase(ease)
+            .SetUpdate(useUnscaledDeathTime);
+
+        bool canceled = await UniTask.WaitUntil(
+                () => deathIrisTween == null || !deathIrisTween.IsActive(),
+                cancellationToken: token)
+            .SuppressCancellationThrow();
+
+        if (canceled)
+        {
+            deathIrisTween?.Kill();
+        }
+
+        deathIrisTween = null;
+        return canceled;
+    }
+
+    private void RestoreTransitionAfterDeath()
+    {
+        if (transitionImage != null)
+        {
+            transitionImage.material = transitionDefaultMaterial;
+            transitionImage.color = transitionColor;
+        }
+
+        if (transitionOverlay != null)
+        {
+            transitionOverlay.anchoredPosition = Vector2.zero;
+            transitionOverlay.gameObject.SetActive(false);
+        }
+    }
+
     private async UniTask<bool> PlayGameStartTransitionAsync(CancellationToken token)
     {
         if (transitionOverlay == null)
@@ -1131,6 +1509,11 @@ public class StageManager : MonoBehaviour
         position.y += keyOffset.y;
         position.z = key.position.z;
         key.position = position;
+
+        if (Application.isPlaying && useKeyGimmick && !isKeyCollected)
+        {
+            StartKeyFloatAnimation();
+        }
     }
 
     private bool IsPlayerTouchingKey() =>
@@ -1147,20 +1530,29 @@ public class StageManager : MonoBehaviour
     private void CollectKey()
     {
         isKeyCollected = true;
-        if (key != null)
+
+        if (keyCollider != null)
         {
-            key.gameObject.SetActive(false);
+            keyCollider.enabled = false;
         }
 
+        PlayKeyCollectAnimation();
         RefreshGoalLockPresentation();
     }
 
     private void ResetKeyGimmick()
     {
+        StopKeyAnimations();
         isKeyCollected = !useKeyGimmick;
         if (key != null)
         {
             key.gameObject.SetActive(useKeyGimmick);
+            key.localScale = keyDefaultScale;
+        }
+
+        if (keySpriteRenderer != null)
+        {
+            keySpriteRenderer.color = keyDefaultColor;
         }
 
         if (keyCollider != null)
@@ -1168,7 +1560,92 @@ public class StageManager : MonoBehaviour
             keyCollider.enabled = useKeyGimmick;
         }
 
+        if (useKeyGimmick)
+        {
+            ApplyKeyPosition();
+        }
+
         RefreshGoalLockPresentation();
+    }
+
+    private void CacheKeyPresentation()
+    {
+        keyDefaultScale = key != null ? key.localScale : Vector3.one;
+        keyDefaultColor = keySpriteRenderer != null
+            ? keySpriteRenderer.color
+            : Color.white;
+    }
+
+    private void StartKeyFloatAnimation()
+    {
+        if (key == null || keyFloatDistance <= 0f)
+        {
+            return;
+        }
+
+        keyFloatTween?.Kill();
+        keyFloatTween = null;
+
+        float centerY = key.position.y;
+        float halfDuration = Mathf.Max(0.01f, keyFloatHalfDuration);
+
+        keyFloatTween = DOTween.Sequence()
+            .Append(key.DOMoveY(centerY + keyFloatDistance, halfDuration)
+                .SetEase(keyFloatEase))
+            .Append(key.DOMoveY(centerY - keyFloatDistance, halfDuration * 2f)
+                .SetEase(keyFloatEase))
+            .Append(key.DOMoveY(centerY, halfDuration)
+                .SetEase(keyFloatEase))
+            .SetLoops(-1, LoopType.Restart);
+    }
+
+    private void PlayKeyCollectAnimation()
+    {
+        keyFloatTween?.Kill();
+        keyFloatTween = null;
+        keyCollectTween?.Kill();
+        keyCollectTween = null;
+
+        if (key == null)
+        {
+            return;
+        }
+
+        if (keyCollectDuration <= 0f)
+        {
+            key.gameObject.SetActive(false);
+            return;
+        }
+
+        keyCollectTween = DOTween.Sequence()
+            .Join(key.DOScale(
+                    keyDefaultScale * keyCollectScale,
+                    keyCollectDuration)
+                .SetEase(keyCollectEase));
+
+        if (keySpriteRenderer != null)
+        {
+            keyCollectTween.Join(
+                keySpriteRenderer.DOFade(0f, keyCollectDuration)
+                    .SetEase(keyCollectEase));
+        }
+
+        keyCollectTween.OnComplete(() =>
+        {
+            keyCollectTween = null;
+            if (key != null)
+            {
+                key.gameObject.SetActive(false);
+            }
+        });
+    }
+
+    private void StopKeyAnimations()
+    {
+        keyFloatTween?.Kill();
+        keyFloatTween = null;
+        keyCollectTween?.Kill();
+        keyCollectTween = null;
     }
 
     private void RefreshGoalLockPresentation()
@@ -1384,6 +1861,10 @@ public class StageManager : MonoBehaviour
         goalReservedCellSize.y = Mathf.Max(2, goalReservedCellSize.y);
         keyReservedCellSize.x = Mathf.Max(1, keyReservedCellSize.x);
         keyReservedCellSize.y = Mathf.Max(1, keyReservedCellSize.y);
+        keyFloatDistance = Mathf.Max(0f, keyFloatDistance);
+        keyFloatHalfDuration = Mathf.Max(0.01f, keyFloatHalfDuration);
+        keyCollectScale = Mathf.Max(1f, keyCollectScale);
+        keyCollectDuration = Mathf.Max(0f, keyCollectDuration);
         playerAbsorbDuration = Mathf.Max(0f, playerAbsorbDuration);
         goalPopScale = Mathf.Max(1f, goalPopScale);
         goalPopDuration = Mathf.Max(0f, goalPopDuration);
@@ -1394,6 +1875,11 @@ public class StageManager : MonoBehaviour
         resultDisplayDelay = Mathf.Max(0f, resultDisplayDelay);
         resultMoveDuration = Mathf.Max(0f, resultMoveDuration);
         pauseMoveDuration = Mathf.Max(0f, pauseMoveDuration);
+        deathIrisCloseDuration = Mathf.Max(0f, deathIrisCloseDuration);
+        deathIrisClosedDuration = Mathf.Max(0f, deathIrisClosedDuration);
+        deathIrisOpenDuration = Mathf.Max(0f, deathIrisOpenDuration);
+        deathPopScale = Mathf.Max(1f, deathPopScale);
+        deathPopDuration = Mathf.Max(0f, deathPopDuration);
         coverDuration = Mathf.Max(0f, coverDuration);
         fullCoverDuration = Mathf.Max(0f, fullCoverDuration);
         revealDuration = Mathf.Max(0f, revealDuration);
@@ -1468,6 +1954,11 @@ public class StageManager : MonoBehaviour
             playerCollider = player.GetComponent<Collider2D>();
         }
 
+        if (playerSpriteRenderer == null && player != null)
+        {
+            playerSpriteRenderer = player.GetComponent<SpriteRenderer>();
+        }
+
         if (goalCollider == null && goal != null)
         {
             goalCollider = goal.GetComponent<Collider2D>();
@@ -1481,6 +1972,11 @@ public class StageManager : MonoBehaviour
         if (keyCollider == null && key != null)
         {
             keyCollider = key.GetComponent<Collider2D>();
+        }
+
+        if (keySpriteRenderer == null && key != null)
+        {
+            keySpriteRenderer = key.GetComponent<SpriteRenderer>();
         }
 
         if (goalCollider != null)
@@ -1631,11 +2127,20 @@ public class StageManager : MonoBehaviour
         pauseBackButton?.onClick.RemoveListener(HidePause);
         nextStageButton?.onClick.RemoveListener(LoadNextStage);
         transitionTween?.Kill();
+        deathIrisTween?.Kill();
+        deathPopTween?.Kill();
         resultTween?.Kill();
         pauseTween?.Kill();
         playerAbsorbTween?.Kill();
         goalPopTween?.Kill();
+        StopKeyAnimations();
         DestroyGoalHoverOutline();
+
+        if (deathIrisMaterial != null)
+        {
+            Destroy(deathIrisMaterial);
+            deathIrisMaterial = null;
+        }
 
         if (IsPaused)
         {
