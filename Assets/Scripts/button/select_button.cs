@@ -30,6 +30,11 @@ public class select_button : MonoBehaviour {
         SceneManager.LoadScene("Stage5");
     }
 
+    public void OnSelectButtonClickStage10()
+    {
+        SceneManager.LoadScene("Stage10");
+    }
+
     // public void OnSelectButtonClickStage6()
     // {
     //     SceneManager.LoadScene("Stage6");
