@@ -799,6 +799,8 @@ public class StageManager : MonoBehaviour
             playerBody.angularVelocity = 0f;
         }
 
+        blockManager?.ResetBgmScrollBarVolume();
+        ResetKeyGimmick();
         ApplyPlayerStartPosition();
         Physics2D.SyncTransforms();
     }

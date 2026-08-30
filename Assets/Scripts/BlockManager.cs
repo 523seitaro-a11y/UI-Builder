@@ -1385,7 +1385,19 @@ public class BlockManager : MonoBehaviour
 
         foreach (PlacedBlock block in placedBlocks)
         {
-            SetPlayModeHoverOutline(block, block == outlinedBlock);
+            bool isJumpOperating = false;
+            foreach (IBlockOperationState state in block.operationStates)
+            {
+                if (state is Jump && state.IsOperating)
+                {
+                    isJumpOperating = true;
+                    break;
+                }
+            }
+
+            SetPlayModeHoverOutline(
+                block,
+                block == outlinedBlock || isJumpOperating);
         }
     }
 

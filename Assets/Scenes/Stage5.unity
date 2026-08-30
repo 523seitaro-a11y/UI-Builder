@@ -542,7 +542,7 @@ MonoBehaviour:
   keyOffset: {x: 0, y: 0}
   keyReservedCellSize: {x: 1, y: 1}
   keyCollider: {fileID: 2100000903}
-  goalLockedSprite: {fileID: 4078206195599454054, guid: a157de6897b33db4986e13c865384820, type: 3}
+  goalLockedSprite: {fileID: -230131590, guid: a157de6897b33db4986e13c865384820, type: 3}
   playerCollider: {fileID: 153433569}
   goalCollider: {fileID: 1531524892}
   useInteractiveGoalResult: 1
@@ -4537,7 +4537,7 @@ BoxCollider2D:
   m_Offset: {x: 0, y: 0}
   m_SpriteTilingProperty:
     border: {x: 0, y: 0, z: 0, w: 0}
-    pivot: {x: 0.5, y: 0.25}
+    pivot: {x: 0.49999997, y: 0.25}
     oldSize: {x: 1, y: 2}
     newSize: {x: 1, y: 2}
     adaptiveTilingThreshold: 0.5
