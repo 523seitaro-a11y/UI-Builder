@@ -647,7 +647,7 @@ public class BlockManager : MonoBehaviour
     {
         if (!activeGridPreviewUsesBgmShadow)
         {
-            ApplyBgmOrientation(activeGridPreview, isVertical);
+            ApplyBgmOrientation(activeGridPreview, isVertical, activeDefinition.isBrightnessScrollBar);
             return;
         }
 
