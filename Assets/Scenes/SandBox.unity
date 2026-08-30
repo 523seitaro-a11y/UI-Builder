@@ -2245,7 +2245,7 @@ MonoBehaviour:
     m_PressedTrigger: Pressed
     m_SelectedTrigger: Selected
     m_DisabledTrigger: Disabled
-  m_Interactable: 1
+  m_Interactable: 0
   m_TargetGraphic: {fileID: 173593371}
   m_OnClick:
     m_PersistentCalls:
@@ -2353,6 +2353,13 @@ MonoBehaviour:
   keyOffset: {x: 0, y: 0}
   keyReservedCellSize: {x: 1, y: 1}
   keyCollider: {fileID: 2100000903}
+  keySpriteRenderer: {fileID: 2100000901}
+  keyFloatDistance: 0.12
+  keyFloatHalfDuration: 0.8
+  keyFloatEase: 4
+  keyCollectScale: 1.5
+  keyCollectDuration: 0.25
+  keyCollectEase: 9
   goalLockedSprite: {fileID: -230131590, guid: a157de6897b33db4986e13c865384820, type: 3}
   playerCollider: {fileID: 153433569}
   goalCollider: {fileID: 1531524892}
@@ -2388,11 +2395,24 @@ MonoBehaviour:
   retryHeight: -8
   retryTilemaps:
   - {fileID: 69396179}
+  playerSpriteRenderer: {fileID: 153433567}
+  playerDeadSprite: {fileID: -2855123688970624977, guid: 43999b936d20b794ebfdabd4538083b1, type: 3}
+  deathIrisShader: {fileID: 4800000, guid: 7c6f39c2de704dddad8a290878960e1a, type: 3}
+  deathIrisColor: {r: 0.23529412, g: 0.23529412, b: 0.23529412, a: 1}
+  deathIrisCloseDuration: 0.45
+  deathIrisClosedDuration: 0.12
+  deathIrisOpenDuration: 0.45
+  deathIrisCloseEase: 8
+  deathIrisOpenEase: 9
+  useUnscaledDeathTime: 1
+  deathPopScale: 1.5
+  deathPopDuration: 0.3
+  deathPopEase: 9
   transitionOverlay: {fileID: 2100000502}
   transitionImage: {fileID: 2100000503}
   transitionColor: {r: 0.23529413, g: 0.23529413, b: 0.23529413, a: 1}
   coverDuration: 0.25
-  fullCoverDuration: 0.2
+  fullCoverDuration: 0.4
   revealDuration: 0.25
   transitionEase: 10
   useUnscaledTransitionTime: 1
@@ -7808,8 +7828,26 @@ MonoBehaviour:
   bgmVolume: 0.5
   loop: 1
   playOnAwake: 1
-  cursorClip: {fileID: 8300000, guid: ee31a42e45b0c7c43b73d339037ac411, type: 3}
+  cursorClip: {fileID: 8300000, guid: eb07ce460516a674b927f31212d24e50, type: 3}
   cursorVolume: 1
+  blockPlacementClip: {fileID: 8300000, guid: 0a6c692a76a314141827a7a1860e0403, type: 3}
+  blockPlacementVolume: 1
+  blockPickupClip: {fileID: 8300000, guid: 0e9c36e55dc986e419076859c35c3920, type: 3}
+  blockPickupVolume: 1
+  invalidPlacementClip: {fileID: 8300000, guid: 643e592fe6868f54dafcc6102394ac5c, type: 3}
+  invalidPlacementVolume: 1
+  blockHoverClip: {fileID: 8300000, guid: 0f3a9226c16d96e46aa3380149d89bc0, type: 3}
+  blockHoverVolume: 1
+  upperPanelRaiseClip: {fileID: 8300000, guid: f36e083ea678be643be5cfdcc36577f9, type: 3}
+  upperPanelRaiseVolume: 1
+  upperPanelLowerClip: {fileID: 8300000, guid: cb5cf109ac7f9f3408e10e816b0e4e87, type: 3}
+  upperPanelLowerVolume: 1
+  gameStartClip: {fileID: 8300000, guid: d5332878bb16e2443bcc44003df3995d, type: 3}
+  gameStartVolume: 1
+  jumpClip: {fileID: 8300000, guid: 08cc04ffa43a6f24d926d5e02822f965, type: 3}
+  jumpVolume: 1
+  deathClip: {fileID: 8300000, guid: a80a3438b7fb2b74aa90ec4632c81088, type: 3}
+  deathVolume: 1
 --- !u!114 &2100000801
 MonoBehaviour:
   m_ObjectHideFlags: 0

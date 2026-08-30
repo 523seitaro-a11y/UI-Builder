@@ -221,6 +221,21 @@ public class CanvasManager : MonoBehaviour
             isManuallyRaised = !isManuallyRaised;
         }
 
+        bool wasRaised = ShouldRaisePanel;
+        isManuallyRaised = !isManuallyRaised;
+        bool raisePanel = ShouldRaisePanel;
+
+        if (wasRaised != raisePanel)
+        {
+            if (raisePanel)
+            {
+                AudioManager.Instance?.PlayUpperPanelRaiseSound();
+            }
+            else
+            {
+                AudioManager.Instance?.PlayUpperPanelLowerSound();
+            }
+        }
         SetPanelPosition(ShouldRaisePanel, true);
         ApplyPanelContentVisibility();
     }

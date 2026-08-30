@@ -2275,7 +2275,7 @@ MonoBehaviour:
   goalPopDuration: 0.25
   goalPopEase: 9
   useUnscaledGoalTime: 1
-  goalHoverSprite: {fileID: -8882385284063193461, guid: fa8dae2659c0d2a41bd6d70e06769951, type: 3}
+  goalReachedSortingOrder: 32767
   resultBackground: {fileID: 941542241}
   resultDisplayDelay: 0.5
   resultShownPosition: {x: 0, y: 0}
@@ -2298,6 +2298,18 @@ MonoBehaviour:
   retryHeight: -8
   retryTilemaps:
   - {fileID: 69396179}
+  playerDeadSprite: {fileID: -2855123688970624977, guid: 43999b936d20b794ebfdabd4538083b1, type: 3}
+  deathIrisShader: {fileID: 4800000, guid: 7c6f39c2de704dddad8a290878960e1a, type: 3}
+  deathIrisColor: {r: 0.23529412, g: 0.23529412, b: 0.23529412, a: 1}
+  deathIrisCloseDuration: 0.45
+  deathIrisClosedDuration: 0.12
+  deathIrisOpenDuration: 0.45
+  deathIrisCloseEase: 8
+  deathIrisOpenEase: 9
+  useUnscaledDeathTime: 1
+  deathPopScale: 1.5
+  deathPopDuration: 0.3
+  deathPopEase: 9
   transitionOverlay: {fileID: 2100000502}
   transitionImage: {fileID: 2100000503}
   transitionColor: {r: 0.23529413, g: 0.23529413, b: 0.23529413, a: 1}
@@ -2323,6 +2335,8 @@ MonoBehaviour:
   blockManager: {fileID: 2100000103}
   longPressDuration: 1
   retryCursorSprite: {fileID: 5207804079435638006, guid: 410c5f345257a504191d63d3f399f73c, type: 3}
+  retryBeforeColor: {r: 1, g: 1, b: 1, a: 1}
+  retryAfterColor: {r: 1, g: 1, b: 1, a: 1}
   pointerCamera: {fileID: 726185809}
   retryCursorOffset: {x: 0, y: 0}
   retryCursorZ: -5
@@ -3162,7 +3176,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: 明るいうちに道を覚えよう　バーに乗って左へ
+  m_text: "\u660E\u308B\u3044\u3046\u3061\u306B\u9053\u3092\u899A\u3048\u3088\u3046\u3000\u30D0\u30FC\u306B\u4E57\u3063\u3066\u5DE6\u3078"
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: b745ea105f221bb45a50e1ab7d16153b, type: 2}
   m_sharedMaterial: {fileID: -4259499787218161454, guid: b745ea105f221bb45a50e1ab7d16153b, type: 2}
@@ -3184,7 +3198,7 @@ MonoBehaviour:
   m_spriteAsset: {fileID: 0}
   m_tintAllSprites: 0
   m_StyleSheet: {fileID: 0}
-  m_TextStyleHashCode: 0
+  m_TextStyleHashCode: -1183493901
   m_overrideHtmlColors: 0
   m_faceColor:
     serializedVersion: 2
@@ -3716,41 +3730,6 @@ RectTransform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 765328009}
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 935018952}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 0}
-  m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 0, y: 0}
-  m_Pivot: {x: 0.5, y: 0.5}
---- !u!1 &2100001000
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 2100001001}
-  m_Layer: 5
-  m_Name: BrightnessVisibilityLayer
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!224 &2100001001
-RectTransform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2100001000}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
@@ -5663,36 +5642,6 @@ Tilemap:
       m_TileObjectToInstantiateIndex: 65535
       dummyAlignment: 0
       m_AllTileFlags: 1073741825
-  - first: {x: 2, y: 0, z: 0}
-    second:
-      serializedVersion: 2
-      m_TileIndex: 0
-      m_TileSpriteIndex: 0
-      m_TileMatrixIndex: 0
-      m_TileColorIndex: 0
-      m_TileObjectToInstantiateIndex: 65535
-      dummyAlignment: 0
-      m_AllTileFlags: 1073741825
-  - first: {x: 3, y: 0, z: 0}
-    second:
-      serializedVersion: 2
-      m_TileIndex: 0
-      m_TileSpriteIndex: 0
-      m_TileMatrixIndex: 0
-      m_TileColorIndex: 0
-      m_TileObjectToInstantiateIndex: 65535
-      dummyAlignment: 0
-      m_AllTileFlags: 1073741825
-  - first: {x: 4, y: -2, z: 0}
-    second:
-      serializedVersion: 2
-      m_TileIndex: 0
-      m_TileSpriteIndex: 0
-      m_TileMatrixIndex: 0
-      m_TileColorIndex: 0
-      m_TileObjectToInstantiateIndex: 65535
-      dummyAlignment: 0
-      m_AllTileFlags: 1073741825
   - first: {x: 5, y: -5, z: 0}
     second:
       serializedVersion: 2
@@ -5783,6 +5732,16 @@ Tilemap:
       m_TileObjectToInstantiateIndex: 65535
       dummyAlignment: 0
       m_AllTileFlags: 1073741825
+  - first: {x: 4, y: -2, z: 0}
+    second:
+      serializedVersion: 2
+      m_TileIndex: 0
+      m_TileSpriteIndex: 0
+      m_TileMatrixIndex: 0
+      m_TileColorIndex: 0
+      m_TileObjectToInstantiateIndex: 65535
+      dummyAlignment: 0
+      m_AllTileFlags: 1073741825
   - first: {x: -2, y: -1, z: 0}
     second:
       serializedVersion: 2
@@ -5794,6 +5753,26 @@ Tilemap:
       dummyAlignment: 0
       m_AllTileFlags: 1073741825
   - first: {x: -1, y: -1, z: 0}
+    second:
+      serializedVersion: 2
+      m_TileIndex: 0
+      m_TileSpriteIndex: 0
+      m_TileMatrixIndex: 0
+      m_TileColorIndex: 0
+      m_TileObjectToInstantiateIndex: 65535
+      dummyAlignment: 0
+      m_AllTileFlags: 1073741825
+  - first: {x: 2, y: 0, z: 0}
+    second:
+      serializedVersion: 2
+      m_TileIndex: 0
+      m_TileSpriteIndex: 0
+      m_TileMatrixIndex: 0
+      m_TileColorIndex: 0
+      m_TileObjectToInstantiateIndex: 65535
+      dummyAlignment: 0
+      m_AllTileFlags: 1073741825
+  - first: {x: 3, y: 0, z: 0}
     second:
       serializedVersion: 2
       m_TileIndex: 0
@@ -6229,7 +6208,7 @@ SpriteRenderer:
   m_Size: {x: 1, y: 2}
   m_AdaptiveModeThreshold: 0.5
   m_SpriteTileMode: 0
-  m_WasSpriteAssigned: 1
+  m_WasSpriteAssigned: 0
   m_MaskInteraction: 0
   m_SpriteSortPoint: 0
 --- !u!4 &1531524891
@@ -6756,6 +6735,7 @@ MonoBehaviour:
     jumpPower: 15
     bgmTrackSource: {fileID: 0}
     bgmHandleSource: {fileID: 0}
+    brightnessIconSprite: {fileID: 0}
   - displayName: MoveL
     isEnabled: 0
     dragSource: {fileID: 366870148}
@@ -6771,6 +6751,7 @@ MonoBehaviour:
     jumpPower: 15
     bgmTrackSource: {fileID: 0}
     bgmHandleSource: {fileID: 0}
+    brightnessIconSprite: {fileID: 0}
   - displayName: Jump
     isEnabled: 1
     dragSource: {fileID: 1522504042}
@@ -6786,6 +6767,7 @@ MonoBehaviour:
     jumpPower: 15
     bgmTrackSource: {fileID: 0}
     bgmHandleSource: {fileID: 0}
+    brightnessIconSprite: {fileID: 0}
   - displayName: BGMScrollBar
     isEnabled: 0
     dragSource: {fileID: 1702264940}
@@ -6801,6 +6783,7 @@ MonoBehaviour:
     jumpPower: 15
     bgmTrackSource: {fileID: 1702264941}
     bgmHandleSource: {fileID: 1267676397}
+    brightnessIconSprite: {fileID: 0}
   - displayName: BrightnessScrollBar
     isEnabled: 1
     dragSource: {fileID: 1260112837}
@@ -6820,6 +6803,7 @@ MonoBehaviour:
   blockAvailabilityVersion: 1
   bgmTrackRightOpacity: 0.4
   bgmTrackColor: {r: 0.4392157, g: 0.4392157, b: 0.4392157, a: 1}
+  bgmScrollBarShadowSprite: {fileID: 0}
   placementGridOrigin: {x: -8, y: -4}
   placementGridSize: {x: 16, y: 8}
   mergePlacedBlocksIntoTilemap: 1
@@ -7386,8 +7370,10 @@ MonoBehaviour:
   bgmVolume: 0.5
   loop: 1
   playOnAwake: 1
-  cursorClip: {fileID: 8300000, guid: ee31a42e45b0c7c43b73d339037ac411, type: 3}
+  cursorClip: {fileID: 8300000, guid: eb07ce460516a674b927f31212d24e50, type: 3}
   cursorVolume: 1
+  deathClip: {fileID: 8300000, guid: 6a0a7a069ae1eb44d817948bafd1c2ba, type: 3}
+  deathVolume: 1
 --- !u!114 &2100000801
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -7535,6 +7521,41 @@ BoxCollider2D:
   m_AutoTiling: 0
   m_Size: {x: 0.898, y: 0.886}
   m_EdgeRadius: 0
+--- !u!1 &2100001000
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2100001001}
+  m_Layer: 5
+  m_Name: BrightnessVisibilityLayer
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &2100001001
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2100001000}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 935018952}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 1, y: 1}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 0, y: 0}
+  m_Pivot: {x: 0.5, y: 0.5}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

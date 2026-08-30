@@ -577,6 +577,18 @@ MonoBehaviour:
   retryHeight: -8
   retryTilemaps:
   - {fileID: 1923328689}
+  playerDeadSprite: {fileID: -2855123688970624977, guid: 43999b936d20b794ebfdabd4538083b1, type: 3}
+  deathIrisShader: {fileID: 4800000, guid: 7c6f39c2de704dddad8a290878960e1a, type: 3}
+  deathIrisColor: {r: 0.23529412, g: 0.23529412, b: 0.23529412, a: 1}
+  deathIrisCloseDuration: 0.45
+  deathIrisClosedDuration: 0.12
+  deathIrisOpenDuration: 0.45
+  deathIrisCloseEase: 8
+  deathIrisOpenEase: 9
+  useUnscaledDeathTime: 1
+  deathPopScale: 1.5
+  deathPopDuration: 0.3
+  deathPopEase: 9
   transitionOverlay: {fileID: 2100000502}
   transitionImage: {fileID: 2100000503}
   transitionColor: {r: 0.23529413, g: 0.23529413, b: 0.23529413, a: 1}
@@ -4481,7 +4493,7 @@ BoxCollider2D:
   m_Offset: {x: 0, y: 0}
   m_SpriteTilingProperty:
     border: {x: 0, y: 0, z: 0, w: 0}
-    pivot: {x: 0.5, y: 0.25}
+    pivot: {x: 0.49999997, y: 0.25}
     oldSize: {x: 1, y: 2}
     newSize: {x: 1, y: 2}
     adaptiveTilingThreshold: 0.5
@@ -5173,6 +5185,7 @@ MonoBehaviour:
   playerBody: {fileID: 153433566}
   playerCollider: {fileID: 153433569}
   playerRenderer: {fileID: 153433567}
+  brightnessController: {fileID: 0}
   rotationDragPop: {fileID: 1479035665}
   blocks:
   - displayName: MoveR
@@ -5185,10 +5198,12 @@ MonoBehaviour:
     hideSourceWhenExhausted: 1
     sourceVisualRoot: {fileID: 0}
     isBgmScrollBar: 0
+    isBrightnessScrollBar: 0
     moveSpeed: 5
     jumpPower: 15
     bgmTrackSource: {fileID: 0}
     bgmHandleSource: {fileID: 0}
+    brightnessIconSprite: {fileID: 0}
   - displayName: MoveL
     isEnabled: 1
     dragSource: {fileID: 366870148}
@@ -5199,10 +5214,12 @@ MonoBehaviour:
     hideSourceWhenExhausted: 1
     sourceVisualRoot: {fileID: 0}
     isBgmScrollBar: 0
+    isBrightnessScrollBar: 0
     moveSpeed: 5
     jumpPower: 15
     bgmTrackSource: {fileID: 0}
     bgmHandleSource: {fileID: 0}
+    brightnessIconSprite: {fileID: 0}
   - displayName: Jump
     isEnabled: 0
     dragSource: {fileID: 0}
@@ -5213,10 +5230,12 @@ MonoBehaviour:
     hideSourceWhenExhausted: 1
     sourceVisualRoot: {fileID: 0}
     isBgmScrollBar: 0
+    isBrightnessScrollBar: 0
     moveSpeed: 5
     jumpPower: 15
     bgmTrackSource: {fileID: 0}
     bgmHandleSource: {fileID: 0}
+    brightnessIconSprite: {fileID: 0}
   - displayName: BGMScrollBar
     isEnabled: 1
     dragSource: {fileID: 1702264940}
@@ -5227,10 +5246,12 @@ MonoBehaviour:
     hideSourceWhenExhausted: 1
     sourceVisualRoot: {fileID: 2062578202}
     isBgmScrollBar: 1
+    isBrightnessScrollBar: 0
     moveSpeed: 5
     jumpPower: 15
     bgmTrackSource: {fileID: 1702264941}
     bgmHandleSource: {fileID: 1267676397}
+    brightnessIconSprite: {fileID: 0}
   blockAvailabilityVersion: 1
   bgmTrackRightOpacity: 0.4
   bgmTrackColor: {r: 0.4392157, g: 0.4392157, b: 0.4392157, a: 1}
@@ -5801,8 +5822,10 @@ MonoBehaviour:
   bgmVolume: 0.5
   loop: 1
   playOnAwake: 1
-  cursorClip: {fileID: 8300000, guid: ee31a42e45b0c7c43b73d339037ac411, type: 3}
+  cursorClip: {fileID: 8300000, guid: eb07ce460516a674b927f31212d24e50, type: 3}
   cursorVolume: 1
+  deathClip: {fileID: 8300000, guid: 6a0a7a069ae1eb44d817948bafd1c2ba, type: 3}
+  deathVolume: 1
 --- !u!114 &2100000801
 MonoBehaviour:
   m_ObjectHideFlags: 0
