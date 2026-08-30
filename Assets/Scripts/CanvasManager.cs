@@ -42,6 +42,8 @@ public class CanvasManager : MonoBehaviour
     [SerializeField] private Button gameStartButton;
     [SerializeField] private Image gameStartButtonImage;
     [SerializeField] private TMP_Text gameStartButtonText;
+    [SerializeField] private CanvasGroup blockListGroup;
+    [SerializeField] private CanvasGroup gameStartGroup;
     [SerializeField] private Color gameStartHoverColor = Color.black;
     [SerializeField] private Color gameStartHoverTextColor = Color.white;
 
@@ -81,6 +83,7 @@ public class CanvasManager : MonoBehaviour
     private bool hasOriginalPosition;
     private bool isDragging;
     private bool isManuallyRaised;
+    private bool isBlockListVisible = true;
     private bool wereRequiredBlocksPlaced;
     private Color gameStartNormalColor;
     private Color gameStartNormalTextColor;
@@ -115,6 +118,7 @@ public class CanvasManager : MonoBehaviour
             wereRequiredBlocksPlaced = AreRequiredBlocksPlaced;
 
             SetPanelPosition(ShouldRaisePanel, false);
+            ApplyPanelContentVisibility();
         }
     }
 
@@ -186,7 +190,20 @@ public class CanvasManager : MonoBehaviour
         }
 
         wereRequiredBlocksPlaced = placementComplete;
+        if (placementComplete)
+        {
+            // 最初の1個を置いたときだけSTARTを見せる。一覧へ戻した後の追加配置では
+            // isBlockListVisibleを維持し、続けて別のブロックを選べるようにする。
+            isBlockListVisible = false;
+            isManuallyRaised = false;
+        }
+        else
+        {
+            isBlockListVisible = true;
+        }
+
         SetPanelPosition(ShouldRaisePanel, true);
+        ApplyPanelContentVisibility();
     }
 
     /// <summary>
@@ -194,8 +211,18 @@ public class CanvasManager : MonoBehaviour
     /// </summary>
     public void ToggleUpperPanel()
     {
-        isManuallyRaised = !isManuallyRaised;
+        if (AreRequiredBlocksPlaced)
+        {
+            isBlockListVisible = !isBlockListVisible;
+            isManuallyRaised = false;
+        }
+        else
+        {
+            isManuallyRaised = !isManuallyRaised;
+        }
+
         SetPanelPosition(ShouldRaisePanel, true);
+        ApplyPanelContentVisibility();
     }
 
     /// <summary>
@@ -227,20 +254,23 @@ public class CanvasManager : MonoBehaviour
         {
             targetPosition.y = upPanelPositionY;
         }
-        else if (!placementComplete)
+        else if (!placementComplete || isBlockListVisible)
         {
             targetPosition.y = downPanelPositionY;
         }
 
+        bool targetShowsBlockList = !raisePanel && (!placementComplete || isBlockListVisible);
+        ApplyPanelContentVisibility();
+
         if (!animate || Vector2.SqrMagnitude(upperBlockPanel.anchoredPosition - targetPosition) < 0.01f)
         {
             upperBlockPanel.anchoredPosition = targetPosition;
-            ApplySwitchSprite(useUpSprite: !raisePanel);
+            ApplySwitchSprite(useUpSprite: targetShowsBlockList);
             return;
         }
 
         // 下にいる間と上昇中はUp、それ以外（上にいる間と下降中）はDownです。
-        ApplySwitchSprite(useUpSprite: raisePanel);
+        ApplySwitchSprite(useUpSprite: targetPosition.y > upperBlockPanel.anchoredPosition.y);
 
         float duration = raisePanel ? moveUpDuration : returnDuration;
         Ease ease = raisePanel ? moveUpEase : returnEase;
@@ -251,10 +281,7 @@ public class CanvasManager : MonoBehaviour
             .SetLink(gameObject)
             .OnComplete(() =>
             {
-                if (ShouldRaisePanel == raisePanel)
-                {
-                    ApplySwitchSprite(useUpSprite: !raisePanel);
-                }
+                ApplySwitchSprite(useUpSprite: targetShowsBlockList);
             });
     }
 
@@ -270,6 +297,31 @@ public class CanvasManager : MonoBehaviour
         {
             panelSwitchImage.sprite = targetSprite;
         }
+    }
+
+    private void ApplyPanelContentVisibility()
+    {
+        bool placementComplete = AreRequiredBlocksPlaced;
+        bool showBlockList = !placementComplete || isBlockListVisible;
+        bool showGameStart = placementComplete && !isBlockListVisible;
+        SetCanvasGroupVisible(blockListGroup, showBlockList);
+        SetCanvasGroupVisible(gameStartGroup, showGameStart);
+        if (!showGameStart)
+        {
+            ResetGameStartHover();
+        }
+    }
+
+    private static void SetCanvasGroupVisible(CanvasGroup group, bool visible)
+    {
+        if (group == null)
+        {
+            return;
+        }
+
+        group.alpha = visible ? 1f : 0f;
+        group.interactable = visible;
+        group.blocksRaycasts = visible;
     }
 
     private void UpdateGameStartButtonHover(Vector2 screenPosition, bool allowHover)
@@ -460,6 +512,20 @@ public class CanvasManager : MonoBehaviour
         if (gameStartButtonText == null && gameStartButton != null)
         {
             gameStartButtonText = gameStartButton.GetComponentInChildren<TMP_Text>(true);
+        }
+
+        if (blockListGroup == null)
+        {
+            GameObject blockListObject = GameObject.Find("BlockListRoot");
+            if (blockListObject != null)
+            {
+                blockListGroup = blockListObject.GetComponent<CanvasGroup>();
+            }
+        }
+
+        if (gameStartGroup == null && gameStartButton != null)
+        {
+            gameStartGroup = gameStartButton.GetComponent<CanvasGroup>();
         }
     }
 

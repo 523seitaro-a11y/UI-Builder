@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.Tilemaps;
@@ -16,6 +17,12 @@ public class BlockManager : MonoBehaviour
         bool IsOperating { get; }
         void BeginOperation();
         void CancelOperation();
+    }
+
+    public interface IPlayModeBlockState
+    {
+        void OnPlayModeEntered();
+        void OnBuildModeEntered();
     }
 
     public event Action<bool> DragStateChanged;
@@ -85,6 +92,18 @@ public class BlockManager : MonoBehaviour
         [Tooltip("画面の明るさを操作する1×4のスクロールバーブロックとして扱います。")]
         public bool isBrightnessScrollBar;
 
+        [Tooltip("開始時にSTEP 1〜3と横幅1〜3をランダムに選ぶ足場として扱います。")]
+        public bool isRandomStepBlock;
+
+        [Tooltip("タップすると上方向へ3×2に展開する候補リスト足場として扱います。")]
+        public bool isUpwardDropdownBlock;
+
+        [Tooltip("タップすると上方向へポップアップ足場を展開するSandBox用ブロックとして扱います。")]
+        public bool isPopupBlock;
+
+        [Tooltip("TilemapへColliderを統合せず、ブロック自身の可変Colliderを使用します。")]
+        public bool usesDynamicCollider;
+
         [Tooltip("worldTemplate未設定のMoveR/MoveLを自動生成するときの移動速度です。")]
         [Min(0f)] public float moveSpeed = 5f;
 
@@ -119,6 +138,7 @@ public class BlockManager : MonoBehaviour
         public Material[] baseMaterials;
         public int[] baseSortingOrders;
         public IBlockOperationState[] operationStates;
+        public IPlayModeBlockState[] playModeStates;
         public SpriteRenderer[] hoverOutlineRenderers;
         public bool isColorInverted;
         public Transform bgmHandle;
@@ -282,6 +302,10 @@ public class BlockManager : MonoBehaviour
     private Material playModeHoverOutlineMaterial;
     private Texture2D runtimeSolidTexture;
     private Sprite runtimeSolidSprite;
+    private Texture2D runtimeVariableBlockFrameTexture;
+    private Sprite runtimeVariableBlockFrameSprite;
+    private Texture2D runtimeVariableBlockCircleTexture;
+    private Sprite runtimeVariableBlockCircleSprite;
     private PlacedBlock activeBgmScrollBar;
     private PlacedBlock pressedPlayModeBlock;
     private bool isPlayerAttachedToBgmHandle;
@@ -394,6 +418,10 @@ public class BlockManager : MonoBehaviour
             if (IsScrollBar(block))
             {
                 PrepareBgmScrollBarDefinition(block);
+            }
+            else if (IsDynamicPlatform(block))
+            {
+                PrepareDynamicPlatformDefinition(block);
             }
             else
             {
@@ -970,6 +998,18 @@ public class BlockManager : MonoBehaviour
             ApplyBgmTrackVisual(block, isBuildMode);
             ApplyBgmTrackDepth(block, isBuildMode);
 
+            foreach (IPlayModeBlockState state in block.playModeStates)
+            {
+                if (isBuildMode)
+                {
+                    state.OnBuildModeEntered();
+                }
+                else
+                {
+                    state.OnPlayModeEntered();
+                }
+            }
+
             if (!isBuildMode)
             {
                 continue;
@@ -1044,11 +1084,17 @@ public class BlockManager : MonoBehaviour
 
         MonoBehaviour[] behaviours = activePreview.GetComponentsInChildren<MonoBehaviour>(true);
         List<IBlockOperationState> states = new List<IBlockOperationState>();
+        List<IPlayModeBlockState> playModeStates = new List<IPlayModeBlockState>();
         foreach (MonoBehaviour behaviour in behaviours)
         {
             if (behaviour is IBlockOperationState state)
             {
                 states.Add(state);
+            }
+
+            if (behaviour is IPlayModeBlockState playModeState)
+            {
+                playModeStates.Add(playModeState);
             }
         }
 
@@ -1075,6 +1121,7 @@ public class BlockManager : MonoBehaviour
             baseMaterials = materials,
             baseSortingOrders = sortingOrders,
             operationStates = states.ToArray(),
+            playModeStates = playModeStates.ToArray(),
             hoverOutlineRenderers = Array.Empty<SpriteRenderer>(),
             bgmHandle = bgmHandle,
             bgmHandleCollider = bgmHandle != null ? bgmHandle.GetComponent<Collider2D>() : null,
@@ -1807,6 +1854,11 @@ public class BlockManager : MonoBehaviour
             return false;
         }
 
+        if (block?.definition != null && IsDynamicPlatform(block.definition))
+        {
+            return string.Equals(source.name, "Background", StringComparison.Ordinal);
+        }
+
         return !IsScrollBar(block.definition) ||
                (block.bgmHandle != null && source.transform.IsChildOf(block.bgmHandle));
     }
@@ -1977,7 +2029,7 @@ public class BlockManager : MonoBehaviour
             {
                 Vector3Int cell = origin + new Vector3Int(x, y, 0);
                 occupiedCells.Add(cell);
-                if (!IsScrollBar(definition))
+                if (!IsScrollBar(definition) && !definition.usesDynamicCollider)
                 {
                     SetCompositeTile(cell, runtimeColliderTile);
                 }
@@ -1997,7 +2049,7 @@ public class BlockManager : MonoBehaviour
                 Vector3Int cell = origin + new Vector3Int(x, y, 0);
                 occupiedCells.Remove(cell);
 
-                if (!IsScrollBar(definition) &&
+                if (!IsScrollBar(definition) && !definition.usesDynamicCollider &&
                     placementTilemap != null &&
                     placementTilemap.GetTile(cell) == runtimeColliderTile)
                 {
@@ -2038,6 +2090,10 @@ public class BlockManager : MonoBehaviour
 
     private static bool IsScrollBar(BlockDefinition definition) =>
         definition != null && (definition.isBgmScrollBar || definition.isBrightnessScrollBar);
+
+    private static bool IsDynamicPlatform(BlockDefinition definition) =>
+        definition != null &&
+        (definition.isRandomStepBlock || definition.isUpwardDropdownBlock || definition.isPopupBlock);
 
     private static bool CanRotate(BlockDefinition definition) => IsScrollBar(definition);
 
@@ -2338,6 +2394,372 @@ public class BlockManager : MonoBehaviour
         definition.worldTemplate = template;
     }
 
+    private void PrepareDynamicPlatformDefinition(BlockDefinition definition)
+    {
+        if (definition.worldTemplate != null || definition.dragSource == null)
+        {
+            return;
+        }
+
+        EnsureRuntimeSolidSprite();
+        EnsureRuntimeVariableBlockFrameSprite();
+        EnsureRuntimeVariableBlockCircleSprite();
+        string blockName = string.IsNullOrWhiteSpace(definition.displayName)
+            ? definition.dragSource.name
+            : definition.displayName;
+        GameObject template = new GameObject($"{blockName} Template");
+        template.transform.SetParent(placedBlockParent, false);
+        template.SetActive(false);
+
+        definition.usesDynamicCollider = true;
+        StyleDynamicBlockSource(definition);
+        TMP_FontAsset fontAsset = definition.dragSource.GetComponentInChildren<TMP_Text>(true)?.font;
+        if (definition.isRandomStepBlock)
+        {
+            definition.footprint = new Vector2Int(3, 1);
+            RandomStepPlatform stepPlatform = template.AddComponent<RandomStepPlatform>();
+            stepPlatform.Configure(
+                runtimeVariableBlockFrameSprite,
+                runtimeVariableBlockCircleSprite,
+                runtimeSolidSprite,
+                fontAsset);
+        }
+        else if (definition.isUpwardDropdownBlock)
+        {
+            definition.footprint = new Vector2Int(3, 2);
+            UpwardDropdownPlatform dropdown = template.AddComponent<UpwardDropdownPlatform>();
+            dropdown.Configure(
+                runtimeVariableBlockFrameSprite,
+                runtimeVariableBlockCircleSprite,
+                runtimeSolidSprite,
+                fontAsset);
+        }
+        else if (definition.isPopupBlock)
+        {
+            definition.footprint = new Vector2Int(5, 3);
+            PopupPlatform popup = template.AddComponent<PopupPlatform>();
+            popup.Configure(
+                runtimeVariableBlockFrameSprite,
+                runtimeSolidSprite,
+                fontAsset);
+        }
+
+        definition.worldTemplate = template;
+    }
+
+    private void StyleDynamicBlockSource(BlockDefinition definition)
+    {
+        if (definition.isRandomStepBlock || definition.isPopupBlock)
+        {
+            float sourceHeight = Mathf.Max(1f, definition.dragSource.sizeDelta.y);
+            definition.dragSource.sizeDelta = new Vector2(sourceHeight * 3f, sourceHeight);
+        }
+
+        Image sourceImage = definition.dragSource.GetComponent<Image>();
+        if (sourceImage == null)
+        {
+            sourceImage = definition.dragSource.GetComponentInChildren<Image>(true);
+        }
+
+        if (sourceImage != null)
+        {
+            sourceImage.sprite = runtimeVariableBlockFrameSprite;
+            sourceImage.type = Image.Type.Sliced;
+            sourceImage.preserveAspect = false;
+            sourceImage.color = Color.white;
+        }
+
+        TMP_Text sourceLabel = definition.dragSource.GetComponentInChildren<TMP_Text>(true);
+        TMP_FontAsset fontAsset = sourceLabel != null ? sourceLabel.font : null;
+        if (sourceLabel != null)
+        {
+            sourceLabel.gameObject.SetActive(false);
+        }
+
+        Transform oldVisual = definition.dragSource.Find("DynamicSourceVisual");
+        if (oldVisual != null)
+        {
+            oldVisual.gameObject.SetActive(false);
+            Destroy(oldVisual.gameObject);
+        }
+
+        RectTransform visualRoot = CreateSourceVisualRoot(definition.dragSource);
+        if (definition.isRandomStepBlock)
+        {
+            BuildStepSourceVisual(visualRoot, fontAsset);
+        }
+        else if (definition.isUpwardDropdownBlock)
+        {
+            BuildDropdownSourceVisual(visualRoot, fontAsset);
+        }
+        else if (definition.isPopupBlock)
+        {
+            BuildPopupSourceVisual(visualRoot, fontAsset);
+        }
+    }
+
+    private RectTransform CreateSourceVisualRoot(RectTransform parent)
+    {
+        GameObject visualObject = new GameObject(
+            "DynamicSourceVisual",
+            typeof(RectTransform));
+        RectTransform root = visualObject.GetComponent<RectTransform>();
+        root.SetParent(parent, false);
+        root.anchorMin = Vector2.zero;
+        root.anchorMax = Vector2.one;
+        root.offsetMin = Vector2.zero;
+        root.offsetMax = Vector2.zero;
+        return root;
+    }
+
+    private void BuildStepSourceVisual(RectTransform root, TMP_FontAsset fontAsset)
+    {
+        Color32 dark = new Color32(59, 59, 59, 255);
+        Color32 light = new Color32(235, 235, 235, 255);
+        Color32 muted = new Color32(145, 145, 145, 255);
+        for (int i = 0; i < 2; i++)
+        {
+            CreateSourceImage(
+                root,
+                $"Connector{i + 1}",
+                runtimeSolidSprite,
+                muted,
+                new Vector2(i == 0 ? -50f : 50f, 0f),
+                new Vector2(42f, 7f));
+        }
+
+        for (int i = 0; i < 3; i++)
+        {
+            Vector2 position = new Vector2((i - 1) * 100f, 0f);
+            CreateSourceImage(root, $"Node{i + 1}Outer", runtimeVariableBlockCircleSprite,
+                dark, position, new Vector2(58f, 58f));
+            CreateSourceImage(root, $"Node{i + 1}Inner", runtimeVariableBlockCircleSprite,
+                light, position, new Vector2(46f, 46f));
+            CreateSourceText(root, $"Node{i + 1}Label", (i + 1).ToString(), fontAsset,
+                muted, position, new Vector2(42f, 42f), 30f);
+        }
+    }
+
+    private void BuildDropdownSourceVisual(RectTransform root, TMP_FontAsset fontAsset)
+    {
+        Color32 dark = new Color32(59, 59, 59, 255);
+        Vector2 nodePosition = new Vector2(-8f, 0f);
+        CreateSourceImage(root, "SelectedNodeOuter", runtimeVariableBlockCircleSprite,
+            dark, nodePosition, new Vector2(58f, 58f));
+        CreateSourceImage(root, "SelectedNodeInner", runtimeVariableBlockCircleSprite,
+            dark, nodePosition, new Vector2(46f, 46f));
+        CreateSourceText(root, "SelectedNodeLabel", "A", fontAsset,
+            Color.white, nodePosition, new Vector2(42f, 42f), 30f);
+
+        Image leftChevron = CreateSourceImage(root, "ChevronLeft", runtimeSolidSprite,
+            dark, new Vector2(20f, 25f), new Vector2(18f, 6f));
+        leftChevron.rectTransform.localRotation = Quaternion.Euler(0f, 0f, 42f);
+        Image rightChevron = CreateSourceImage(root, "ChevronRight", runtimeSolidSprite,
+            dark, new Vector2(33f, 25f), new Vector2(18f, 6f));
+        rightChevron.rectTransform.localRotation = Quaternion.Euler(0f, 0f, -42f);
+    }
+
+    private void BuildPopupSourceVisual(RectTransform root, TMP_FontAsset fontAsset)
+    {
+        Color32 dark = new Color32(59, 59, 59, 255);
+        CreateSourceText(
+            root,
+            "PopupLabel",
+            "ポップアップを開く",
+            fontAsset,
+            dark,
+            Vector2.zero,
+            new Vector2(270f, 72f),
+            28f);
+    }
+
+    private static Image CreateSourceImage(
+        RectTransform parent,
+        string objectName,
+        Sprite sprite,
+        Color color,
+        Vector2 position,
+        Vector2 size)
+    {
+        GameObject imageObject = new GameObject(
+            objectName,
+            typeof(RectTransform),
+            typeof(CanvasRenderer),
+            typeof(Image));
+        RectTransform rect = imageObject.GetComponent<RectTransform>();
+        rect.SetParent(parent, false);
+        rect.anchorMin = new Vector2(0.5f, 0.5f);
+        rect.anchorMax = new Vector2(0.5f, 0.5f);
+        rect.anchoredPosition = position;
+        rect.sizeDelta = size;
+        Image image = imageObject.GetComponent<Image>();
+        image.sprite = sprite;
+        image.color = color;
+        image.raycastTarget = false;
+        return image;
+    }
+
+    private static TMP_Text CreateSourceText(
+        RectTransform parent,
+        string objectName,
+        string value,
+        TMP_FontAsset fontAsset,
+        Color color,
+        Vector2 position,
+        Vector2 size,
+        float fontSize)
+    {
+        GameObject textObject = new GameObject(
+            objectName,
+            typeof(RectTransform),
+            typeof(CanvasRenderer),
+            typeof(TextMeshProUGUI));
+        RectTransform rect = textObject.GetComponent<RectTransform>();
+        rect.SetParent(parent, false);
+        rect.anchorMin = new Vector2(0.5f, 0.5f);
+        rect.anchorMax = new Vector2(0.5f, 0.5f);
+        rect.anchoredPosition = position;
+        rect.sizeDelta = size;
+        TextMeshProUGUI label = textObject.GetComponent<TextMeshProUGUI>();
+        if (fontAsset != null)
+        {
+            label.font = fontAsset;
+        }
+
+        label.text = value;
+        label.color = color;
+        label.alignment = TextAlignmentOptions.Center;
+        label.fontSize = fontSize;
+        label.enableAutoSizing = false;
+        label.textWrappingMode = TextWrappingModes.NoWrap;
+        label.overflowMode = TextOverflowModes.Truncate;
+        label.raycastTarget = false;
+        return label;
+    }
+
+    private void EnsureRuntimeVariableBlockFrameSprite()
+    {
+        if (runtimeVariableBlockFrameSprite != null)
+        {
+            return;
+        }
+
+        const int textureSize = 128;
+        const int frameInset = 10;
+        runtimeVariableBlockFrameTexture = new Texture2D(
+            textureSize,
+            textureSize,
+            TextureFormat.RGBA32,
+            false)
+        {
+            name = "Variable Block Frame Texture",
+            filterMode = FilterMode.Bilinear,
+            wrapMode = TextureWrapMode.Clamp,
+            hideFlags = HideFlags.HideAndDontSave
+        };
+
+        Color32 transparent = new Color32(0, 0, 0, 0);
+        Color32 border = new Color32(59, 59, 59, 255);
+        Color32 fill = new Color32(235, 235, 235, 255);
+        Color32[] pixels = new Color32[textureSize * textureSize];
+        for (int y = 0; y < textureSize; y++)
+        {
+            for (int x = 0; x < textureSize; x++)
+            {
+                bool insideOuter = IsInsideRoundedRect(x, y, textureSize, 0, 15f);
+                bool insideInner = IsInsideRoundedRect(x, y, textureSize, frameInset, 8f);
+                pixels[y * textureSize + x] = !insideOuter
+                    ? transparent
+                    : insideInner
+                        ? fill
+                        : border;
+            }
+        }
+
+        runtimeVariableBlockFrameTexture.SetPixels32(pixels);
+        runtimeVariableBlockFrameTexture.Apply();
+        runtimeVariableBlockFrameSprite = Sprite.Create(
+            runtimeVariableBlockFrameTexture,
+            new Rect(0f, 0f, textureSize, textureSize),
+            new Vector2(0.5f, 0.5f),
+            textureSize,
+            0,
+            SpriteMeshType.FullRect,
+            new Vector4(18f, 18f, 18f, 18f));
+        runtimeVariableBlockFrameSprite.name = "Variable Block Frame Sprite";
+        runtimeVariableBlockFrameSprite.hideFlags = HideFlags.HideAndDontSave;
+    }
+
+    private void EnsureRuntimeVariableBlockCircleSprite()
+    {
+        if (runtimeVariableBlockCircleSprite != null)
+        {
+            return;
+        }
+
+        const int textureSize = 128;
+        float radius = textureSize * 0.5f - 1f;
+        Vector2 center = new Vector2(textureSize * 0.5f, textureSize * 0.5f);
+        runtimeVariableBlockCircleTexture = new Texture2D(
+            textureSize,
+            textureSize,
+            TextureFormat.RGBA32,
+            false)
+        {
+            name = "Variable Block Circle Texture",
+            filterMode = FilterMode.Bilinear,
+            wrapMode = TextureWrapMode.Clamp,
+            hideFlags = HideFlags.HideAndDontSave
+        };
+
+        Color32[] pixels = new Color32[textureSize * textureSize];
+        for (int y = 0; y < textureSize; y++)
+        {
+            for (int x = 0; x < textureSize; x++)
+            {
+                Vector2 point = new Vector2(x + 0.5f, y + 0.5f);
+                pixels[y * textureSize + x] = Vector2.Distance(point, center) <= radius
+                    ? new Color32(255, 255, 255, 255)
+                    : new Color32(255, 255, 255, 0);
+            }
+        }
+
+        runtimeVariableBlockCircleTexture.SetPixels32(pixels);
+        runtimeVariableBlockCircleTexture.Apply();
+        runtimeVariableBlockCircleSprite = Sprite.Create(
+            runtimeVariableBlockCircleTexture,
+            new Rect(0f, 0f, textureSize, textureSize),
+            new Vector2(0.5f, 0.5f),
+            textureSize,
+            0,
+            SpriteMeshType.FullRect);
+        runtimeVariableBlockCircleSprite.name = "Variable Block Circle Sprite";
+        runtimeVariableBlockCircleSprite.hideFlags = HideFlags.HideAndDontSave;
+    }
+
+    private static bool IsInsideRoundedRect(
+        int pixelX,
+        int pixelY,
+        int textureSize,
+        int inset,
+        float radius)
+    {
+        float x = pixelX + 0.5f;
+        float y = pixelY + 0.5f;
+        float min = inset;
+        float max = textureSize - inset;
+        if (x < min || x > max || y < min || y > max)
+        {
+            return false;
+        }
+
+        float centerX = Mathf.Clamp(x, min + radius, max - radius);
+        float centerY = Mathf.Clamp(y, min + radius, max - radius);
+        float deltaX = x - centerX;
+        float deltaY = y - centerY;
+        return deltaX * deltaX + deltaY * deltaY <= radius * radius;
+    }
+
     private void EnsureRuntimeSolidSprite()
     {
         if (runtimeSolidSprite != null)
@@ -2477,7 +2899,7 @@ public class BlockManager : MonoBehaviour
     private void SetPlacedCollidersAsTriggers()
     {
         // BGMScrollBarはTilemapへ統合せず、ハンドル1セルだけを通常Colliderとして残します。
-        if (!mergePlacedBlocksIntoTilemap || IsScrollBar(activeDefinition))
+        if (!mergePlacedBlocksIntoTilemap || IsScrollBar(activeDefinition) || activeDefinition.usesDynamicCollider)
         {
             return;
         }
@@ -2519,9 +2941,29 @@ public class BlockManager : MonoBehaviour
             Destroy(runtimeSolidSprite);
         }
 
+        if (runtimeVariableBlockFrameSprite != null)
+        {
+            Destroy(runtimeVariableBlockFrameSprite);
+        }
+
+        if (runtimeVariableBlockCircleSprite != null)
+        {
+            Destroy(runtimeVariableBlockCircleSprite);
+        }
+
         if (runtimeSolidTexture != null)
         {
             Destroy(runtimeSolidTexture);
+        }
+
+        if (runtimeVariableBlockFrameTexture != null)
+        {
+            Destroy(runtimeVariableBlockFrameTexture);
+        }
+
+        if (runtimeVariableBlockCircleTexture != null)
+        {
+            Destroy(runtimeVariableBlockCircleTexture);
         }
 
     }
