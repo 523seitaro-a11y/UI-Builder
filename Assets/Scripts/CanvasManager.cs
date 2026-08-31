@@ -211,6 +211,8 @@ public class CanvasManager : MonoBehaviour
     /// </summary>
     public void ToggleUpperPanel()
     {
+        bool wasRaised = ShouldRaisePanel;
+
         if (AreRequiredBlocksPlaced)
         {
             isBlockListVisible = !isBlockListVisible;
@@ -221,8 +223,6 @@ public class CanvasManager : MonoBehaviour
             isManuallyRaised = !isManuallyRaised;
         }
 
-        bool wasRaised = ShouldRaisePanel;
-        isManuallyRaised = !isManuallyRaised;
         bool raisePanel = ShouldRaisePanel;
 
         if (wasRaised != raisePanel)

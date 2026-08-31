@@ -3553,9 +3553,25 @@ MonoBehaviour:
   bgmVolume: 0.5
   loop: 1
   playOnAwake: 1
-  cursorClip: {fileID: 8300000, guid: ee31a42e45b0c7c43b73d339037ac411, type: 3}
+  cursorClip: {fileID: 8300000, guid: eb07ce460516a674b927f31212d24e50, type: 3}
   cursorVolume: 1
-  deathClip: {fileID: 8300000, guid: 6a0a7a069ae1eb44d817948bafd1c2ba, type: 3}
+  blockPlacementClip: {fileID: 8300000, guid: 0a6c692a76a314141827a7a1860e0403, type: 3}
+  blockPlacementVolume: 1
+  blockPickupClip: {fileID: 8300000, guid: 0e9c36e55dc986e419076859c35c3920, type: 3}
+  blockPickupVolume: 1
+  invalidPlacementClip: {fileID: 8300000, guid: 643e592fe6868f54dafcc6102394ac5c, type: 3}
+  invalidPlacementVolume: 1
+  blockHoverClip: {fileID: 8300000, guid: 0f3a9226c16d96e46aa3380149d89bc0, type: 3}
+  blockHoverVolume: 1
+  upperPanelRaiseClip: {fileID: 8300000, guid: f36e083ea678be643be5cfdcc36577f9, type: 3}
+  upperPanelRaiseVolume: 1
+  upperPanelLowerClip: {fileID: 8300000, guid: cb5cf109ac7f9f3408e10e816b0e4e87, type: 3}
+  upperPanelLowerVolume: 1
+  gameStartClip: {fileID: 8300000, guid: d5332878bb16e2443bcc44003df3995d, type: 3}
+  gameStartVolume: 1
+  jumpClip: {fileID: 8300000, guid: 08cc04ffa43a6f24d926d5e02822f965, type: 3}
+  jumpVolume: 1
+  deathClip: {fileID: 8300000, guid: a80a3438b7fb2b74aa90ec4632c81088, type: 3}
   deathVolume: 1
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
