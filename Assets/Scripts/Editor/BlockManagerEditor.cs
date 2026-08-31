@@ -3,6 +3,7 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.UI;
+using TMPro;
 
 [CustomEditor(typeof(BlockManager))]
 public sealed class BlockManagerEditor : Editor
@@ -14,19 +15,28 @@ public sealed class BlockManagerEditor : Editor
         public readonly Vector2Int Footprint;
         public readonly bool IsBgmScrollBar;
         public readonly bool IsBrightnessScrollBar;
+        public readonly bool IsRandomStepBlock;
+        public readonly bool IsUpwardDropdownBlock;
+        public readonly bool IsPopupBlock;
 
         public BlockPreset(
             string name,
             string spritePath,
             Vector2Int footprint,
             bool isBgmScrollBar = false,
-            bool isBrightnessScrollBar = false)
+            bool isBrightnessScrollBar = false,
+            bool isRandomStepBlock = false,
+            bool isUpwardDropdownBlock = false,
+            bool isPopupBlock = false)
         {
             Name = name;
             SpritePath = spritePath;
             Footprint = footprint;
             IsBgmScrollBar = isBgmScrollBar;
             IsBrightnessScrollBar = isBrightnessScrollBar;
+            IsRandomStepBlock = isRandomStepBlock;
+            IsUpwardDropdownBlock = isUpwardDropdownBlock;
+            IsPopupBlock = isPopupBlock;
         }
 
         public bool IsScrollBar => IsBgmScrollBar || IsBrightnessScrollBar;
@@ -42,7 +52,10 @@ public sealed class BlockManagerEditor : Editor
             "BrightnessScrollBar",
             "Assets/Sprites/Block/Brightness.png",
             new Vector2Int(4, 1),
-            isBrightnessScrollBar: true)
+            isBrightnessScrollBar: true),
+        new BlockPreset("RandomStep", null, new Vector2Int(3, 1), isRandomStepBlock: true),
+        new BlockPreset("UpwardDropdown", null, new Vector2Int(3, 2), isUpwardDropdownBlock: true),
+        new BlockPreset("Popup", null, new Vector2Int(5, 3), isPopupBlock: true)
     };
 
     private SerializedProperty blocksProperty;
@@ -153,6 +166,11 @@ public sealed class BlockManagerEditor : Editor
         definition.FindPropertyRelative("hideSourceWhenExhausted").boolValue = true;
         definition.FindPropertyRelative("isBgmScrollBar").boolValue = preset.IsBgmScrollBar;
         definition.FindPropertyRelative("isBrightnessScrollBar").boolValue = preset.IsBrightnessScrollBar;
+        definition.FindPropertyRelative("isRandomStepBlock").boolValue = preset.IsRandomStepBlock;
+        definition.FindPropertyRelative("isUpwardDropdownBlock").boolValue = preset.IsUpwardDropdownBlock;
+        definition.FindPropertyRelative("isPopupBlock").boolValue = preset.IsPopupBlock;
+        definition.FindPropertyRelative("usesDynamicCollider").boolValue =
+            preset.IsRandomStepBlock || preset.IsUpwardDropdownBlock || preset.IsPopupBlock;
         definition.FindPropertyRelative("moveSpeed").floatValue = 5f;
         definition.FindPropertyRelative("jumpPower").floatValue = 15f;
     }
@@ -190,7 +208,11 @@ public sealed class BlockManagerEditor : Editor
 
     private RectTransform CreateSource(BlockPreset preset)
     {
-        RectTransform parent = FindSourceInScene("BlockBG");
+        RectTransform parent = FindSourceInScene("BlockListRoot");
+        if (parent == null)
+        {
+            parent = FindSourceInScene("BlockBG");
+        }
         if (parent == null)
         {
             Debug.LogWarning($"BlockManager: {preset.Name} を作成する親の BlockBG が見つかりません。", target);
@@ -216,9 +238,25 @@ public sealed class BlockManagerEditor : Editor
         Image image = sourceObject.GetComponent<Image>();
         image.sprite = preset.IsBrightnessScrollBar
             ? FindSprite(preset.SpritePath, "BrightnessPalette")
-            : AssetDatabase.LoadAssetAtPath<Sprite>(preset.SpritePath);
+            : string.IsNullOrWhiteSpace(preset.SpritePath)
+                ? null
+                : AssetDatabase.LoadAssetAtPath<Sprite>(preset.SpritePath);
         image.preserveAspect = true;
         image.raycastTarget = true;
+
+        if (preset.IsRandomStepBlock || preset.IsUpwardDropdownBlock || preset.IsPopupBlock)
+        {
+            image.sprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/UISprite.psd");
+            image.type = Image.Type.Sliced;
+            image.preserveAspect = false;
+            image.color = new Color(0.92f, 0.92f, 0.92f, 1f);
+            if (preset.IsRandomStepBlock || preset.IsPopupBlock)
+            {
+                source.sizeDelta = new Vector2(300f, 100f);
+            }
+
+            CreateDynamicSourceVisual(source, preset);
+        }
 
         if (parent.GetComponent<LayoutGroup>() == null)
         {
@@ -226,6 +264,156 @@ public sealed class BlockManagerEditor : Editor
         }
 
         return source;
+    }
+
+    private static void CreateDynamicSourceVisual(RectTransform parent, BlockPreset preset)
+    {
+        GameObject visualObject = new GameObject("DynamicSourceVisual", typeof(RectTransform));
+        Undo.RegisterCreatedObjectUndo(visualObject, "可変ブロック表示を追加");
+        RectTransform visualRoot = visualObject.GetComponent<RectTransform>();
+        visualRoot.SetParent(parent, false);
+        visualRoot.anchorMin = Vector2.zero;
+        visualRoot.anchorMax = Vector2.one;
+        visualRoot.offsetMin = Vector2.zero;
+        visualRoot.offsetMax = Vector2.zero;
+        parent = visualRoot;
+
+        Sprite circle = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/Knob.psd");
+        Sprite solid = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/UISprite.psd");
+        TMP_FontAsset font = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(
+            "Assets/Fonts/LINESeedJP-Bold SDF.asset");
+        Color32 dark = new Color32(59, 59, 59, 255);
+        Color32 light = new Color32(235, 235, 235, 255);
+        Color32 muted = new Color32(145, 145, 145, 255);
+
+        if (preset.IsRandomStepBlock)
+        {
+            for (int i = 0; i < 2; i++)
+            {
+                CreateSourceImage(parent, $"Connector{i + 1}", solid, muted,
+                    new Vector2(i == 0 ? -50f : 50f, 0f), new Vector2(42f, 7f));
+            }
+
+            for (int i = 0; i < 3; i++)
+            {
+                Vector2 position = new Vector2((i - 1) * 100f, 0f);
+                CreateSourceImage(parent, $"Node{i + 1}Outer", circle, dark,
+                    position, new Vector2(58f, 58f));
+                CreateSourceImage(parent, $"Node{i + 1}Inner", circle, light,
+                    position, new Vector2(46f, 46f));
+                CreateSourceText(parent, $"Node{i + 1}Label", (i + 1).ToString(), font,
+                    muted, position);
+            }
+
+            return;
+        }
+
+        if (preset.IsPopupBlock)
+        {
+            CreateSourceText(
+                parent,
+                "PopupLabel",
+                "ポップアップを開く",
+                font,
+                dark,
+                Vector2.zero,
+                new Vector2(270f, 72f),
+                28f);
+            return;
+        }
+
+        Vector2 nodePosition = new Vector2(-8f, 0f);
+        CreateSourceImage(parent, "SelectedNodeOuter", circle, dark,
+            nodePosition, new Vector2(58f, 58f));
+        CreateSourceImage(parent, "SelectedNodeInner", circle, dark,
+            nodePosition, new Vector2(46f, 46f));
+        CreateSourceText(parent, "SelectedNodeLabel", "A", font, Color.white, nodePosition);
+        CreateSourceText(parent, "Chevron", "▲", font, dark,
+            new Vector2(28f, 22f), new Vector2(32f, 32f), 24f);
+    }
+
+    private static Image CreateSourceImage(
+        RectTransform parent,
+        string objectName,
+        Sprite sprite,
+        Color color,
+        Vector2 position,
+        Vector2 size)
+    {
+        GameObject imageObject = new GameObject(
+            objectName,
+            typeof(RectTransform),
+            typeof(CanvasRenderer),
+            typeof(Image));
+        Undo.RegisterCreatedObjectUndo(imageObject, "可変ブロック表示を追加");
+        RectTransform rect = imageObject.GetComponent<RectTransform>();
+        rect.SetParent(parent, false);
+        rect.anchoredPosition = position;
+        rect.sizeDelta = size;
+        Image image = imageObject.GetComponent<Image>();
+        image.sprite = sprite;
+        image.color = color;
+        image.raycastTarget = false;
+        return image;
+    }
+
+    private static TMP_Text CreateSourceText(
+        RectTransform parent,
+        string objectName,
+        string value,
+        TMP_FontAsset font,
+        Color color,
+        Vector2 position,
+        Vector2? size = null,
+        float fontSize = 30f)
+    {
+        GameObject textObject = new GameObject(
+            objectName,
+            typeof(RectTransform),
+            typeof(CanvasRenderer),
+            typeof(TextMeshProUGUI));
+        Undo.RegisterCreatedObjectUndo(textObject, "可変ブロック文字を追加");
+        RectTransform rect = textObject.GetComponent<RectTransform>();
+        rect.SetParent(parent, false);
+        rect.anchoredPosition = position;
+        rect.sizeDelta = size ?? new Vector2(42f, 42f);
+        TextMeshProUGUI label = textObject.GetComponent<TextMeshProUGUI>();
+        label.font = font;
+        label.text = value;
+        label.color = color;
+        label.alignment = TextAlignmentOptions.Center;
+        label.fontSize = fontSize;
+        label.enableAutoSizing = false;
+        label.textWrappingMode = TextWrappingModes.NoWrap;
+        label.overflowMode = TextOverflowModes.Truncate;
+        label.raycastTarget = false;
+        return label;
+    }
+
+    private static void CreateSourceLabel(RectTransform parent, string labelText)
+    {
+        GameObject labelObject = new GameObject(
+            "Label",
+            typeof(RectTransform),
+            typeof(CanvasRenderer),
+            typeof(TextMeshProUGUI));
+        Undo.RegisterCreatedObjectUndo(labelObject, "ブロックラベルを追加");
+        RectTransform rect = labelObject.GetComponent<RectTransform>();
+        rect.SetParent(parent, false);
+        rect.anchorMin = Vector2.zero;
+        rect.anchorMax = Vector2.one;
+        rect.offsetMin = new Vector2(4f, 4f);
+        rect.offsetMax = new Vector2(-4f, -4f);
+
+        TextMeshProUGUI label = labelObject.GetComponent<TextMeshProUGUI>();
+        label.font = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>("Assets/Fonts/LINESeedJP-Bold SDF.asset");
+        label.text = labelText;
+        label.alignment = TextAlignmentOptions.Center;
+        label.enableAutoSizing = true;
+        label.fontSizeMin = 8f;
+        label.fontSizeMax = 28f;
+        label.color = Color.black;
+        label.raycastTarget = false;
     }
 
     private static GameObject ResolveSourceRoot(RectTransform source, string sourceName)
