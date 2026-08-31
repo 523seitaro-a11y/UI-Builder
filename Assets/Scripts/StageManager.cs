@@ -1529,20 +1529,25 @@ public class StageManager : MonoBehaviour
 
     private void CollectKey()
     {
-        isKeyCollected = true;
-
         if (keyCollider != null)
         {
             keyCollider.enabled = false;
         }
 
         PlayKeyCollectAnimation();
-        RefreshGoalLockPresentation();
     }
 
     private void ResetKeyGimmick()
     {
         StopKeyAnimations();
+        goalPopTween?.Kill();
+        goalPopTween = null;
+
+        if (goal != null)
+        {
+            goal.localScale = goalDefaultScale;
+        }
+
         isKeyCollected = !useKeyGimmick;
         if (key != null)
         {
@@ -1608,17 +1613,19 @@ public class StageManager : MonoBehaviour
 
         if (key == null)
         {
+            CompleteKeyCollection();
             return;
         }
 
         if (keyCollectDuration <= 0f)
         {
             key.gameObject.SetActive(false);
+            CompleteKeyCollection();
             return;
         }
 
         keyCollectTween = DOTween.Sequence()
-            .Join(key.DOScale(
+            .Append(key.DOScale(
                     keyDefaultScale * keyCollectScale,
                     keyCollectDuration)
                 .SetEase(keyCollectEase));
@@ -1637,7 +1644,18 @@ public class StageManager : MonoBehaviour
             {
                 key.gameObject.SetActive(false);
             }
+
+            CompleteKeyCollection();
         });
+    }
+
+    private void CompleteKeyCollection()
+    {
+        isKeyCollected = true;
+        RefreshGoalLockPresentation();
+
+        // 鍵のフェード完了後、ゴール表示の切り替えと既存のゴールPopを同時に開始します。
+        PlayGoalPopAsync(this.GetCancellationTokenOnDestroy()).Forget();
     }
 
     private void StopKeyAnimations()
