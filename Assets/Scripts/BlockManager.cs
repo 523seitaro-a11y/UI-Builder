@@ -12,6 +12,8 @@ using UnityEngine.UI;
 /// </summary>
 public class BlockManager : MonoBehaviour
 {
+    private const string UiForegroundSortingLayer = "UIForeground";
+
     public interface IBlockOperationState
     {
         bool IsOperating { get; }
@@ -25,6 +27,11 @@ public class BlockManager : MonoBehaviour
         void OnBuildModeEntered();
     }
 
+    public interface IBlockClickState
+    {
+        void Click();
+    }
+
     public event Action<bool> DragStateChanged;
 
     public bool IsDragging => activePreview != null;
@@ -32,6 +39,8 @@ public class BlockManager : MonoBehaviour
     public Shader PlayModeHoverOutlineShader => playModeHoverOutlineShader;
     public float PlayModeHoverOutlineWidth => playModeHoverOutlineWidth;
     public bool IsBuildMode { get; private set; } = true;
+    public bool IsPlayerCrushedByScrollBar { get; private set; }
+    public bool IsPlayerStopped { get; private set; }
     public int PlacedBlockCount => placedBlocks.Count;
     public bool AllBlocksPlaced
     {
@@ -68,6 +77,9 @@ public class BlockManager : MonoBehaviour
         [Tooltip("画面上部に表示されているドラッグ元のRectTransformです。")]
         public RectTransform dragSource;
 
+        [Tooltip("同じブロックを複数使用するときに表示する、2個目以降のドラッグ元です。")]
+        public RectTransform[] additionalDragSources = Array.Empty<RectTransform>();
+
         [Tooltip("フィールドへ複製するワールド側のGameObjectです。SpriteRendererや動作用スクリプトを含められます。")]
         public GameObject worldTemplate;
 
@@ -101,6 +113,15 @@ public class BlockManager : MonoBehaviour
         [Tooltip("タップすると上方向へポップアップ足場を展開するSandBox用ブロックとして扱います。")]
         public bool isPopupBlock;
 
+        [Tooltip("クリックするたびにプレイヤーの停止と再開を切り替える1×1ブロックとして扱います。")]
+        public bool isPauseBlock;
+
+        [Tooltip("クリックするとプレイヤーのリトライを実行する7×7ブロックとして扱います。")]
+        public bool isRetryBlock;
+
+        [Tooltip("プレイヤーの位置・慣性・表示を保存／復元する1×2ブロックとして扱います。")]
+        public bool isSaveBlock;
+
         [Tooltip("TilemapへColliderを統合せず、ブロック自身の可変Colliderを使用します。")]
         public bool usesDynamicCollider;
 
@@ -118,6 +139,15 @@ public class BlockManager : MonoBehaviour
 
         [Tooltip("BrightnessScrollBarの四角ハンドル内に表示するアイコンです。")]
         public Sprite brightnessIconSprite;
+
+        [Tooltip("縦向きBrightnessScrollBarのバー部分に使用するSpriteです。")]
+        public Sprite brightnessScrollBarSprite;
+
+        [Tooltip("一時停止中のブロック表示に使用するPlayスプライトです。")]
+        public Sprite pausePlaySprite;
+
+        [Tooltip("保存済みのセーブブロック表示に使用するLoadスプライトです。")]
+        public Sprite saveLoadSprite;
 
         [NonSerialized] public int usedCount;
         [NonSerialized] public Vector3 sourceBaseScale;
@@ -159,14 +189,12 @@ public class BlockManager : MonoBehaviour
     private sealed class BrightnessVisibilityVisual
     {
         public RectTransform root;
-        public RectTransform trackOutline;
         public RectTransform trackLeft;
         public RectTransform trackRight;
         public RectTransform handle;
-        public RectTransform handleFill;
-        public RectTransform icon;
         public Image trackLeftImage;
         public Image trackRightImage;
+        public Image handleImage;
     }
 
     [Header("必須参照")]
@@ -194,7 +222,7 @@ public class BlockManager : MonoBehaviour
     [Tooltip("BrightnessScrollBarから画面の明るさを変更するコントローラーです。")]
     [SerializeField] private ScreenBrightnessController brightnessController;
 
-    [Tooltip("回転可能なブロックをドラッグしている間だけ表示するCanvas上のPopです。")]
+    [Tooltip("旧スクロールバー回転案内Popです。現在は常に非表示です。")]
     [SerializeField] private GameObject rotationDragPop;
 
     [Header("配置するブロック")]
@@ -296,6 +324,7 @@ public class BlockManager : MonoBehaviour
     private readonly List<SpriteRenderer> gridPreviewRenderers = new List<SpriteRenderer>();
     private readonly List<Color> gridPreviewOriginalColors = new List<Color>();
     private readonly List<IBlockOperationState> pointerOperationStates = new List<IBlockOperationState>();
+    private readonly RaycastHit2D[] scrollBarCrushHits = new RaycastHit2D[16];
 
     private Tile runtimeColliderTile;
     private TilemapCollider2D placementTilemapCollider;
@@ -313,6 +342,10 @@ public class BlockManager : MonoBehaviour
     private Vector2 playerBgmHandleOffset;
     private bool hasBgmScrollBarResetVolume;
     private float bgmScrollBarResetVolume;
+    private bool hasPlayerStopPhysicsState;
+    private float playerStopOriginalGravityScale;
+    private PhysicsMaterial2D playerStopOriginalMaterial;
+    private PhysicsMaterial2D playerStopFrictionlessMaterial;
 
     private static readonly Vector2[] HoverOutlineDirections =
     {
@@ -408,6 +441,8 @@ public class BlockManager : MonoBehaviour
                 continue;
             }
 
+            EnsureBrightnessSourceInBlockBackground(block);
+
             bool isEnabled = block.isEnabled && block.dragSource != null;
             if (block.dragSource != null)
             {
@@ -458,6 +493,77 @@ public class BlockManager : MonoBehaviour
         }
     }
 
+    private void Start()
+    {
+        foreach (BlockDefinition block in blocks)
+        {
+            if (block == null || !block.isEnabled || !block.isBrightnessScrollBar || block.dragSource == null)
+            {
+                continue;
+            }
+
+            EnsureBrightnessSourceInBlockBackground(block);
+            GameObject sourceObject = GetSourceObject(block);
+            sourceObject.SetActive(true);
+            sourceObject.transform.SetAsLastSibling();
+
+            foreach (Image image in sourceObject.GetComponentsInChildren<Image>(true))
+            {
+                image.enabled = true;
+                image.canvasRenderer.SetAlpha(1f);
+            }
+
+            foreach (CanvasGroup group in sourceObject.GetComponentsInChildren<CanvasGroup>(true))
+            {
+                group.alpha = 1f;
+                group.interactable = true;
+                group.blocksRaycasts = true;
+            }
+        }
+
+        Canvas.ForceUpdateCanvases();
+    }
+
+    private static void EnsureBrightnessSourceInBlockBackground(BlockDefinition definition)
+    {
+        if (definition == null || !definition.isBrightnessScrollBar || definition.dragSource == null)
+        {
+            return;
+        }
+
+        GameObject sourceObject = GetSourceObject(definition);
+        Transform sourceTransform = sourceObject.transform;
+        Transform blockBackground = sourceTransform.parent;
+        while (blockBackground != null && blockBackground.name != "BlockBG")
+        {
+            blockBackground = blockBackground.parent;
+        }
+
+        if (blockBackground == null)
+        {
+            return;
+        }
+
+        SetLayerRecursively(sourceObject, blockBackground.gameObject.layer);
+
+        if (sourceTransform.parent == blockBackground)
+        {
+            sourceTransform.SetAsLastSibling();
+            return;
+        }
+
+        sourceTransform.SetParent(blockBackground, true);
+        sourceTransform.SetAsLastSibling();
+    }
+
+    private static void SetLayerRecursively(GameObject root, int layer)
+    {
+        foreach (Transform child in root.GetComponentsInChildren<Transform>(true))
+        {
+            child.gameObject.layer = layer;
+        }
+    }
+
     private void Update()
     {
         UpdateBgmTrackVisuals(IsBuildMode);
@@ -466,6 +572,7 @@ public class BlockManager : MonoBehaviour
         if (!IsBuildMode)
         {
             UpdateBgmScrollBarInteraction();
+            UpdateClickBlockInteraction();
             UpdateOperationColors();
             UpdatePlayModeHoverOutline();
             return;
@@ -491,11 +598,6 @@ public class BlockManager : MonoBehaviour
         if (activePreview == null)
         {
             return;
-        }
-
-        if (Input.GetMouseButtonDown(1) && CanRotate(activeDefinition))
-        {
-            ToggleActiveBgmOrientation();
         }
 
         UpdatePreview(screenPosition);
@@ -613,8 +715,7 @@ public class BlockManager : MonoBehaviour
 
         foreach (BlockDefinition block in blocks)
         {
-            if (!CanCreate(block) ||
-                !RectTransformUtility.RectangleContainsScreenPoint(block.dragSource, screenPosition, GetUiCamera(block.dragSource)))
+            if (!CanCreate(block) || !IsPointerOverBlockSource(block, screenPosition))
             {
                 continue;
             }
@@ -680,6 +781,11 @@ public class BlockManager : MonoBehaviour
             ApplyBgmOrientation(activePreview, definition.isBgmVertical, definition.isBrightnessScrollBar);
             ApplyBgmOrientation(activeGridPreview, definition.isBgmVertical, definition.isBrightnessScrollBar);
         }
+        if (definition.isBrightnessScrollBar)
+        {
+            SetBrightnessDragVisual(activePreview, true);
+            SetBrightnessDragVisual(activeGridPreview, true);
+        }
 
         CacheAndDisablePreviewComponents();
         CachePreviewRenderers();
@@ -688,7 +794,7 @@ public class BlockManager : MonoBehaviour
         activeGridPreview.SetActive(true);
         hasLastCursorSoundCell = false;
         suppressNextCursorSound = true;
-        SetRotationDragPopVisible(CanRotate(definition));
+        SetRotationDragPopVisible(false);
         AudioManager.Instance?.PlayBlockPickupSound();
         DragStateChanged?.Invoke(true);
     }
@@ -708,27 +814,6 @@ public class BlockManager : MonoBehaviour
         SpriteRenderer shadowRenderer = shadow.AddComponent<SpriteRenderer>();
         shadowRenderer.sprite = bgmScrollBarShadowSprite;
         return shadow;
-    }
-
-    private void ApplyActiveBgmGridPreviewOrientation(bool isVertical)
-    {
-        if (!activeGridPreviewUsesBgmShadow)
-        {
-            ApplyBgmOrientation(activeGridPreview, isVertical, activeDefinition.isBrightnessScrollBar);
-            return;
-        }
-
-        activeGridPreview.transform.localRotation = isVertical
-            ? Quaternion.Euler(0f, 0f, 90f)
-            : Quaternion.identity;
-    }
-
-    private void ToggleActiveBgmOrientation()
-    {
-        activeDefinition.isBgmVertical = !activeDefinition.isBgmVertical;
-        UpdateBgmFootprint(activeDefinition);
-        ApplyBgmOrientation(activePreview, activeDefinition.isBgmVertical, activeDefinition.isBrightnessScrollBar);
-        ApplyBgmOrientation(activeGridPreview, activeDefinition.isBgmVertical, activeDefinition.isBrightnessScrollBar);
     }
 
     private static void UpdateBgmFootprint(BlockDefinition definition)
@@ -762,7 +847,7 @@ public class BlockManager : MonoBehaviour
                 -1.9f,
                 1.9f,
                 0.6f,
-                isBrightnessScrollBar ? Color.white : bgmTrackColor,
+                bgmTrackColor,
                 isVertical);
         }
 
@@ -774,7 +859,7 @@ public class BlockManager : MonoBehaviour
                 -1.9f,
                 1.9f,
                 0.6f,
-                isBrightnessScrollBar ? new Color(0.22f, 0.22f, 0.22f, 1f) : bgmTrackColor,
+                bgmTrackColor,
                 isVertical);
             trackRight.gameObject.SetActive(false);
         }
@@ -804,6 +889,14 @@ public class BlockManager : MonoBehaviour
                 {
                     return block;
                 }
+            }
+
+            // 通常ブロックのColliderは配置後にTilemapへ統合されるため、
+            // シーンやCollider更新のタイミングによっては個別Colliderでクリックを拾えません。
+            // 描画範囲も併用して、配置した見た目そのものをクリック領域にします。
+            if (IsPointInsideBlockVisual(block, point))
+            {
+                return block;
             }
         }
 
@@ -918,6 +1011,42 @@ public class BlockManager : MonoBehaviour
         return placementCamera.ScreenToWorldPoint(new Vector3(screenPosition.x, screenPosition.y, depth));
     }
 
+    private void UpdateClickBlockInteraction()
+    {
+        if (!TryGetPointerState(out Vector2 screenPosition, out PointerPhase phase) ||
+            phase != PointerPhase.Began)
+        {
+            return;
+        }
+
+        PlacedBlock block = FindPlacedBlock(screenPosition);
+        if (block?.operationStates == null)
+        {
+            return;
+        }
+
+        foreach (IBlockOperationState state in block.operationStates)
+        {
+            if (state is IBlockClickState clickState)
+            {
+                // 上部ウィンドウ等の透明なUIが画面全体を覆うシーンでも、
+                // 配置済みクリックブロック自身に当たっていれば操作を優先します。
+                clickState.Click();
+            }
+        }
+    }
+
+    private void FixedUpdate()
+    {
+        if (!IsPlayerStopped || playerBody == null)
+        {
+            return;
+        }
+
+        playerBody.linearVelocity = Vector2.zero;
+        playerBody.angularVelocity = 0f;
+    }
+
     private void UpdatePreview(Vector2 screenPosition)
     {
         Vector3 worldPoint = ScreenToWorld(screenPosition);
@@ -1009,6 +1138,10 @@ public class BlockManager : MonoBehaviour
     {
         bool isNew = activePlacedBlock == null;
         activePreview.transform.position = GetSnappedPosition(activeDefinition, cell);
+        if (activeDefinition.isBrightnessScrollBar)
+        {
+            SetBrightnessDragVisual(activePreview, false);
+        }
         RestorePreviewAppearance();
         RestorePreviewComponents();
         SetPlacedCollidersAsTriggers();
@@ -1028,22 +1161,28 @@ public class BlockManager : MonoBehaviour
         }
 
         activeDefinition.usedCount++;
-        if (activeDefinition.availableCount >= 0 &&
-            activeDefinition.usedCount >= activeDefinition.availableCount &&
-            activeDefinition.hideSourceWhenExhausted)
+        bool isExhausted = activeDefinition.availableCount >= 0 &&
+                           activeDefinition.usedCount >= activeDefinition.availableCount;
+        if (isExhausted && activeDefinition.hideSourceWhenExhausted)
         {
             SetSourceActive(activeDefinition, false);
+        }
+        else
+        {
+            SetSourceActive(activeDefinition, true);
         }
     }
 
     public void SetBuildMode(bool isBuildMode)
     {
+        SetPlayerStopped(false);
         bool isReturningToBuildMode = isBuildMode && !IsBuildMode;
         EndPlacedBlockOperation();
         StopBgmHandlePlayerMotion();
         activeBgmScrollBar = null;
         pressedPlayModeBlock = null;
         isPlayerAttachedToBgmHandle = false;
+        IsPlayerCrushedByScrollBar = false;
         HideAllPlayModeHoverOutlines();
         IsBuildMode = isBuildMode;
 
@@ -1087,9 +1226,11 @@ public class BlockManager : MonoBehaviour
     /// </summary>
     public void ResetBgmScrollBarVolume()
     {
+        SetPlayerStopped(false);
         StopBgmHandlePlayerMotion();
         activeBgmScrollBar = null;
         isPlayerAttachedToBgmHandle = false;
+        IsPlayerCrushedByScrollBar = false;
 
         foreach (PlacedBlock block in placedBlocks)
         {
@@ -1281,7 +1422,67 @@ public class BlockManager : MonoBehaviour
             isPlayerAttachedToBgmHandle = TryAttachPlayerToBgmHandle(block);
         }
 
-        Vector3 handlePosition = block.bgmHandle.position;
+        float normalizedValue = travel <= Mathf.Epsilon
+            ? 1f
+            : Mathf.InverseLerp(minimum, maximum, handleAxisPosition);
+
+        foreach (PlacedBlock placedBlock in placedBlocks)
+        {
+            if (!IsSameScrollBarType(block, placedBlock))
+            {
+                continue;
+            }
+
+            SetScrollBarHandleNormalized(
+                placedBlock,
+                normalizedValue,
+                placedBlock == block && isPlayerAttachedToBgmHandle);
+        }
+
+        if (block.definition.isBrightnessScrollBar)
+        {
+            brightnessController?.SetBrightness(normalizedValue);
+        }
+        else
+        {
+            AudioManager.Instance?.SetBgmVolume(
+                block.bgmMaximumVolume * normalizedValue);
+        }
+    }
+
+    private static bool IsSameScrollBarType(PlacedBlock source, PlacedBlock candidate) =>
+        source != null &&
+        candidate != null &&
+        IsScrollBar(candidate.definition) &&
+        source.definition.isBrightnessScrollBar == candidate.definition.isBrightnessScrollBar;
+
+    private void SetScrollBarHandleNormalized(
+        PlacedBlock block,
+        float normalizedValue,
+        bool carryAttachedPlayer)
+    {
+        if (block.instance == null || block.bgmHandle == null || placementTilemap == null)
+        {
+            return;
+        }
+
+        Vector2Int footprint = GetValidFootprint(block.definition);
+        bool isVertical = block.isBgmVertical;
+        float cellLength = isVertical
+            ? Mathf.Abs(placementTilemap.layoutGrid.cellSize.y)
+            : Mathf.Abs(placementTilemap.layoutGrid.cellSize.x);
+        int footprintLength = isVertical ? footprint.y : footprint.x;
+        float travel = Mathf.Max(0f, (footprintLength - 1) * cellLength);
+        float center = isVertical
+            ? block.instance.transform.position.y
+            : block.instance.transform.position.x;
+        float handleAxisPosition = Mathf.Lerp(
+            center - travel * 0.5f,
+            center + travel * 0.5f,
+            Mathf.Clamp01(normalizedValue));
+
+        Vector3 previousHandlePosition = block.bgmHandle.position;
+        Vector3 handlePosition = previousHandlePosition;
         if (isVertical)
         {
             handlePosition.y = handleAxisPosition;
@@ -1291,30 +1492,17 @@ public class BlockManager : MonoBehaviour
             handlePosition.x = handleAxisPosition;
         }
 
+        Vector2 handleMovement = handlePosition - previousHandlePosition;
+        DetectScrollBarCrush(block, handleMovement, carryAttachedPlayer);
         block.bgmHandle.position = handlePosition;
+        block.bgmNormalizedValue = Mathf.Clamp01(normalizedValue);
         ApplyBgmTrackVisual(block, false);
 
-        if (isPlayerAttachedToBgmHandle && playerBody != null)
+        if (carryAttachedPlayer && playerBody != null)
         {
-            Vector2 playerPosition = playerBody.position;
-            playerPosition = (Vector2)block.bgmHandle.position + playerBgmHandleOffset;
-            playerBody.position = playerPosition;
+            playerBody.position = (Vector2)block.bgmHandle.position + playerBgmHandleOffset;
             playerBody.WakeUp();
             playerBody.linearVelocity = Vector2.zero;
-        }
-
-        block.bgmNormalizedValue = travel <= Mathf.Epsilon
-            ? 1f
-            : Mathf.InverseLerp(minimum, maximum, handleAxisPosition);
-
-        if (block.definition.isBrightnessScrollBar)
-        {
-            brightnessController?.SetBrightness(block.bgmNormalizedValue);
-        }
-        else
-        {
-            AudioManager.Instance?.SetBgmVolume(
-                block.bgmMaximumVolume * block.bgmNormalizedValue);
         }
     }
 
@@ -1322,6 +1510,7 @@ public class BlockManager : MonoBehaviour
     {
         if (block == null || block.bgmHandle == null || block.bgmHandleCollider == null ||
             playerBody == null || playerCollider == null ||
+            IsPlayerStopped ||
             !block.bgmHandleCollider.enabled || !playerCollider.enabled)
         {
             return false;
@@ -1358,6 +1547,86 @@ public class BlockManager : MonoBehaviour
         }
 
         playerBody.linearVelocity = Vector2.zero;
+    }
+
+    public void SetPlayerStopped(bool stopped)
+    {
+        // OnDisableやシーン破棄中の停止解除ではGameObject.Findを実行しません。
+        // 無効化途中のオブジェクト検索はUnity内部のIsActive Assertionを発生させます。
+        if (stopped)
+        {
+            FindPlayerPhysicsReferences();
+        }
+
+        if (playerBody == null)
+        {
+            IsPlayerStopped = false;
+            hasPlayerStopPhysicsState = false;
+            return;
+        }
+
+        if (stopped == IsPlayerStopped)
+        {
+            if (stopped)
+            {
+                playerBody.linearVelocity = Vector2.zero;
+                playerBody.angularVelocity = 0f;
+            }
+
+            return;
+        }
+
+        if (stopped)
+        {
+            playerStopOriginalGravityScale = playerBody.gravityScale;
+            playerStopOriginalMaterial = playerCollider != null
+                ? playerCollider.sharedMaterial
+                : null;
+            hasPlayerStopPhysicsState = true;
+
+            if (playerCollider != null)
+            {
+                if (playerStopFrictionlessMaterial == null)
+                {
+                    playerStopFrictionlessMaterial = new PhysicsMaterial2D("Player Stop Frictionless")
+                    {
+                        friction = 0f,
+                        bounciness = playerStopOriginalMaterial != null
+                            ? playerStopOriginalMaterial.bounciness
+                            : 0f,
+                        hideFlags = HideFlags.HideAndDontSave
+                    };
+                }
+
+                playerCollider.sharedMaterial = playerStopFrictionlessMaterial;
+            }
+
+            StopBgmHandlePlayerMotion();
+            activeBgmScrollBar = null;
+            isPlayerAttachedToBgmHandle = false;
+            playerBody.gravityScale = 0f;
+            playerBody.linearVelocity = Vector2.zero;
+            playerBody.angularVelocity = 0f;
+            playerBody.WakeUp();
+            IsPlayerStopped = true;
+            return;
+        }
+
+        IsPlayerStopped = false;
+        if (hasPlayerStopPhysicsState)
+        {
+            playerBody.gravityScale = playerStopOriginalGravityScale;
+            if (playerCollider != null)
+            {
+                playerCollider.sharedMaterial = playerStopOriginalMaterial;
+            }
+
+            hasPlayerStopPhysicsState = false;
+        }
+
+        playerBody.linearVelocity = Vector2.zero;
+        playerBody.angularVelocity = 0f;
+        playerBody.WakeUp();
     }
 
     private void FindPlayerPhysicsReferences()
@@ -1459,10 +1728,8 @@ public class BlockManager : MonoBehaviour
         const float trackMaxX = 1.9f;
         const float trackHeight = 0.6f;
         bool isVertical = block.isBgmVertical;
-        Color leftColor = block.definition.isBrightnessScrollBar ? Color.white : bgmTrackColor;
-        Color rightColor = block.definition.isBrightnessScrollBar
-            ? new Color(0.22f, 0.22f, 0.22f, 1f)
-            : bgmTrackColor;
+        Color leftColor = bgmTrackColor;
+        Color rightColor = bgmTrackColor;
 
         if (isBuildMode)
         {
@@ -1490,10 +1757,7 @@ public class BlockManager : MonoBehaviour
             isVertical);
 
         Color transparentColor = rightColor;
-        if (!block.definition.isBrightnessScrollBar)
-        {
-            transparentColor.a *= bgmTrackRightOpacity;
-        }
+        transparentColor.a *= bgmTrackRightOpacity;
         block.bgmTrackRightRenderer.gameObject.SetActive(true);
         SetBgmTrackSegment(
             block.bgmTrackRightRenderer,
@@ -1511,6 +1775,7 @@ public class BlockManager : MonoBehaviour
             : null;
         bool shouldShow = !IsBuildMode &&
                           visibilityLayer != null &&
+                          !brightnessController.UsesWorldOverlay &&
                           brightnessController.Brightness < 0.999f;
 
         foreach (PlacedBlock block in placedBlocks)
@@ -1558,43 +1823,35 @@ public class BlockManager : MonoBehaviour
         root.sizeDelta = Vector2.zero;
         root.SetAsLastSibling();
 
-        RectTransform outline = CreateBrightnessSourceImage(
-            root, "TrackOutline", Vector2.zero, Vector2.one, Color.black);
         RectTransform trackLeft = CreateBrightnessSourceImage(
-            root, "TrackLeft", Vector2.zero, Vector2.one, Color.white);
+            root,
+            "TrackLeft",
+            Vector2.zero,
+            Vector2.one,
+            bgmTrackColor);
         RectTransform trackRight = CreateBrightnessSourceImage(
             root,
             "TrackRight",
             Vector2.zero,
             Vector2.one,
-            new Color(0.22f, 0.22f, 0.22f, 1f));
+            bgmTrackColor);
         RectTransform handle = CreateBrightnessSourceImage(
-            root, "Handle", Vector2.zero, Vector2.one, Color.black);
-        RectTransform fill = CreateBrightnessSourceImage(
-            handle,
-            "Fill",
+            root,
+            "Handle",
             Vector2.zero,
             Vector2.one,
-            new Color(0.92f, 0.92f, 0.92f, 1f));
-        RectTransform icon = CreateBrightnessSourceImage(
-            handle,
-            "Icon",
-            Vector2.zero,
-            Vector2.one,
-            Color.black,
+            Color.white,
             block.definition.brightnessIconSprite);
 
         block.brightnessVisibilityVisual = new BrightnessVisibilityVisual
         {
             root = root,
-            trackOutline = outline,
             trackLeft = trackLeft,
             trackRight = trackRight,
             handle = handle,
-            handleFill = fill,
-            icon = icon,
             trackLeftImage = trackLeft.GetComponent<Image>(),
-            trackRightImage = trackRight.GetComponent<Image>()
+            trackRightImage = trackRight.GetComponent<Image>(),
+            handleImage = handle.GetComponent<Image>()
         };
         rootObject.SetActive(false);
         return block.brightnessVisibilityVisual;
@@ -1631,12 +1888,6 @@ public class BlockManager : MonoBehaviour
         float angle = Mathf.Atan2(axis.y, axis.x) * Mathf.Rad2Deg;
         visual.root.anchoredPosition = center;
 
-        SetBrightnessVisibilityRect(
-            visual.trackOutline,
-            Vector2.zero,
-            new Vector2(4f * pixelsPerWorldUnit, 0.76f * pixelsPerWorldUnit),
-            angle);
-
         const float trackMin = -1.9f;
         const float trackMax = 1.9f;
         float split = Mathf.Clamp(
@@ -1651,7 +1902,9 @@ public class BlockManager : MonoBehaviour
             axis,
             angle,
             pixelsPerWorldUnit,
-            Color.white);
+            bgmTrackColor);
+        Color transparentTrackColor = bgmTrackColor;
+        transparentTrackColor.a *= bgmTrackRightOpacity;
         SetBrightnessVisibilityTrackSegment(
             visual.trackRight,
             visual.trackRightImage,
@@ -1660,13 +1913,16 @@ public class BlockManager : MonoBehaviour
             axis,
             angle,
             pixelsPerWorldUnit,
-            new Color(0.22f, 0.22f, 0.22f, 1f));
+            transparentTrackColor);
 
         visual.handle.anchoredPosition = handlePoint - center;
         visual.handle.sizeDelta = Vector2.one * pixelsPerWorldUnit;
         visual.handle.localRotation = Quaternion.identity;
-        visual.handleFill.sizeDelta = Vector2.one * (0.84f * pixelsPerWorldUnit);
-        visual.icon.sizeDelta = Vector2.one * (0.62f * pixelsPerWorldUnit);
+        bool inverted = invertOperatingBlockColors && block == activeBgmScrollBar;
+        visual.handleImage.color = Color.white;
+        visual.handleImage.material = inverted && operationInversionMaterial != null
+            ? operationInversionMaterial
+            : null;
         return true;
     }
 
@@ -1971,7 +2227,7 @@ public class BlockManager : MonoBehaviour
         for (int i = 0; i < block.renderers.Length; i++)
         {
             SpriteRenderer renderer = block.renderers[i];
-            if (block.definition.isBgmScrollBar &&
+            if (IsScrollBar(block.definition) &&
                 (renderer == block.bgmTrackRenderer ||
                  renderer == block.bgmTrackRightRenderer))
             {
@@ -2155,8 +2411,6 @@ public class BlockManager : MonoBehaviour
         definition != null &&
         (definition.isRandomStepBlock || definition.isUpwardDropdownBlock || definition.isPopupBlock);
 
-    private static bool CanRotate(BlockDefinition definition) => IsScrollBar(definition);
-
     private void SetRotationDragPopVisible(bool visible)
     {
         // Do not use ?. here: it only checks the managed reference and does not
@@ -2169,14 +2423,18 @@ public class BlockManager : MonoBehaviour
 
     private void PrepareBgmScrollBarDefinition(BlockDefinition definition)
     {
-        definition.isBgmVertical = false;
+        definition.isBgmVertical = definition.isBrightnessScrollBar;
         UpdateBgmFootprint(definition);
         definition.bgmMaximumVolume = definition.isBgmScrollBar
             ? AudioManager.CurrentBgmVolume
             : 1f;
 
         EnsureRuntimeSolidSprite();
-        if (definition.isBrightnessScrollBar)
+        if (definition.isBgmScrollBar)
+        {
+            PrepareBgmSourceVisual(definition);
+        }
+        else if (definition.isBrightnessScrollBar)
         {
             PrepareBrightnessSourceVisual(definition);
         }
@@ -2195,6 +2453,7 @@ public class BlockManager : MonoBehaviour
         trackOutlineRenderer.sprite = runtimeSolidSprite;
         trackOutlineRenderer.color = Color.black;
         trackOutline.transform.localScale = new Vector3(4f, 0.76f, 1f);
+        trackOutline.SetActive(false);
 
         GameObject track = new GameObject("Track");
         track.transform.SetParent(template.transform, false);
@@ -2237,8 +2496,192 @@ public class BlockManager : MonoBehaviour
         handleCollider.size = Vector2.one;
         handleCollider.isTrigger = false;
 
+        if (definition.isBrightnessScrollBar && definition.brightnessScrollBarSprite != null)
+        {
+            GameObject dragVisual = new GameObject("BrightnessDragVisual");
+            dragVisual.transform.SetParent(template.transform, false);
+            SpriteRenderer dragRenderer = dragVisual.AddComponent<SpriteRenderer>();
+            dragRenderer.sprite = definition.brightnessScrollBarSprite;
+            dragRenderer.color = Color.white;
+            FitSpriteRenderer(dragVisual.transform, dragRenderer, new Vector2(1f, 4f), true);
+            dragVisual.SetActive(false);
+        }
+
         definition.worldTemplate = template;
         template.SetActive(false);
+    }
+
+    private void DetectScrollBarCrush(
+        PlacedBlock block,
+        Vector2 handleMovement,
+        bool isPlayerAttachedToThisHandle)
+    {
+        if (IsPlayerCrushedByScrollBar ||
+            block == null || block.bgmHandleCollider == null ||
+            playerCollider == null || !playerCollider.enabled ||
+            handleMovement.sqrMagnitude <= 0.000001f)
+        {
+            return;
+        }
+
+        Physics2D.SyncTransforms();
+        Vector2 direction = handleMovement.normalized;
+        float movementDistance = handleMovement.magnitude;
+        const float crushTolerance = 0.03f;
+
+        if (isPlayerAttachedToThisHandle)
+        {
+            IsPlayerCrushedByScrollBar = HasBlockingColliderInDirection(
+                playerCollider,
+                direction,
+                movementDistance + crushTolerance,
+                block.bgmHandleCollider);
+            return;
+        }
+
+        if (!TryGetPlayerHitDistance(
+                block.bgmHandleCollider,
+                direction,
+                movementDistance,
+                out float playerHitDistance))
+        {
+            return;
+        }
+
+        float pushedDistance = movementDistance - playerHitDistance;
+        if (pushedDistance <= 0f)
+        {
+            return;
+        }
+
+        IsPlayerCrushedByScrollBar = HasBlockingColliderInDirection(
+            playerCollider,
+            direction,
+            pushedDistance + crushTolerance,
+            block.bgmHandleCollider);
+    }
+
+    private bool TryGetPlayerHitDistance(
+        Collider2D movingCollider,
+        Vector2 direction,
+        float distance,
+        out float hitDistance)
+    {
+        hitDistance = 0f;
+        ContactFilter2D filter = CreateSolidContactFilter(movingCollider);
+        int hitCount = movingCollider.Cast(direction, filter, scrollBarCrushHits, distance);
+        float closestDistance = float.PositiveInfinity;
+
+        for (int i = 0; i < hitCount; i++)
+        {
+            RaycastHit2D hit = scrollBarCrushHits[i];
+            if (hit.collider != playerCollider || hit.distance >= closestDistance)
+            {
+                continue;
+            }
+
+            closestDistance = hit.distance;
+        }
+
+        if (float.IsPositiveInfinity(closestDistance))
+        {
+            return false;
+        }
+
+        hitDistance = closestDistance;
+        return true;
+    }
+
+    private bool HasBlockingColliderInDirection(
+        Collider2D collider,
+        Vector2 direction,
+        float distance,
+        Collider2D ignoredCollider)
+    {
+        ContactFilter2D filter = CreateSolidContactFilter(collider);
+        int hitCount = collider.Cast(direction, filter, scrollBarCrushHits, distance);
+
+        for (int i = 0; i < hitCount; i++)
+        {
+            Collider2D hitCollider = scrollBarCrushHits[i].collider;
+            if (hitCollider == null ||
+                hitCollider == collider ||
+                hitCollider == ignoredCollider ||
+                hitCollider.isTrigger ||
+                !hitCollider.enabled)
+            {
+                continue;
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsPointerOverBlockSource(BlockDefinition definition, Vector2 screenPosition)
+    {
+        if (IsPointerOverSource(definition.dragSource, screenPosition))
+        {
+            return true;
+        }
+
+        if (definition.additionalDragSources == null)
+        {
+            return false;
+        }
+
+        foreach (RectTransform source in definition.additionalDragSources)
+        {
+            if (IsPointerOverSource(source, screenPosition))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsPointerOverSource(RectTransform source, Vector2 screenPosition) =>
+        source != null &&
+        source.gameObject.activeInHierarchy &&
+        RectTransformUtility.RectangleContainsScreenPoint(
+            source,
+            screenPosition,
+            GetUiCamera(source));
+
+    private static ContactFilter2D CreateSolidContactFilter(Collider2D collider)
+    {
+        ContactFilter2D filter = new ContactFilter2D
+        {
+            useTriggers = false
+        };
+        filter.SetLayerMask(Physics2D.GetLayerCollisionMask(collider.gameObject.layer));
+        return filter;
+    }
+
+    private void PrepareBgmSourceVisual(BlockDefinition definition)
+    {
+        RectTransform source = definition.dragSource;
+        if (source == null)
+        {
+            return;
+        }
+
+        source.sizeDelta = new Vector2(400f, 100f);
+        Image sourceImage = source.GetComponent<Image>();
+        if (sourceImage != null && bgmScrollBarShadowSprite != null)
+        {
+            sourceImage.sprite = bgmScrollBarShadowSprite;
+            sourceImage.color = Color.white;
+            sourceImage.preserveAspect = true;
+            sourceImage.raycastTarget = true;
+        }
+
+        if (definition.bgmHandleSource != null && definition.bgmHandleSource != sourceImage)
+        {
+            definition.bgmHandleSource.enabled = false;
+        }
     }
 
     private void PrepareBrightnessSourceVisual(BlockDefinition definition)
@@ -2249,32 +2692,21 @@ public class BlockManager : MonoBehaviour
             return;
         }
 
-        source.sizeDelta = new Vector2(450f, 100f);
+        source.sizeDelta = new Vector2(100f, 400f);
         Image sourceImage = source.GetComponent<Image>();
         if (sourceImage != null)
         {
-            sourceImage.sprite = null;
-            sourceImage.color = Color.clear;
-            sourceImage.preserveAspect = false;
+            sourceImage.sprite = definition.brightnessScrollBarSprite;
+            sourceImage.color = Color.white;
+            sourceImage.preserveAspect = true;
             sourceImage.raycastTarget = true;
         }
 
-        if (source.Find("BrightnessBarVisual") != null)
+        Transform oldVisual = source.Find("BrightnessBarVisual");
+        if (oldVisual != null)
         {
-            return;
+            oldVisual.gameObject.SetActive(false);
         }
-
-        RectTransform visual = CreateBrightnessSourceImage(
-            source, "BrightnessBarVisual", Vector2.zero, new Vector2(400f, 76f), Color.black);
-        CreateBrightnessSourceImage(
-            visual, "Track", Vector2.zero, new Vector2(380f, 60f), Color.white);
-
-        RectTransform handle = CreateBrightnessSourceImage(
-            visual, "Handle", new Vector2(150f, 0f), new Vector2(100f, 100f), Color.black);
-        CreateBrightnessSourceImage(
-            handle, "Fill", Vector2.zero, new Vector2(84f, 84f), new Color(0.92f, 0.92f, 0.92f, 1f));
-        CreateBrightnessSourceImage(
-            handle, "Icon", Vector2.zero, new Vector2(62f, 62f), Color.black, definition.brightnessIconSprite);
     }
 
     private static RectTransform CreateBrightnessSourceImage(
@@ -2308,27 +2740,48 @@ public class BlockManager : MonoBehaviour
 
     private void CreateBrightnessWorldHandle(Transform handle, Sprite iconSprite)
     {
-        GameObject frame = CreateSolidWorldVisual(
-            handle, "Frame", Color.black, Vector2.one, 0f);
-        CreateSolidWorldVisual(
-            frame.transform,
-            "Fill",
-            new Color(0.92f, 0.92f, 0.92f, 1f),
-            new Vector2(0.84f, 0.84f),
-            -0.01f);
-
         if (iconSprite == null)
         {
             return;
         }
 
         GameObject icon = new GameObject("Icon");
-        icon.transform.SetParent(frame.transform, false);
-        icon.transform.localPosition = new Vector3(0f, 0f, -0.02f);
+        icon.transform.SetParent(handle, false);
+        icon.transform.localPosition = Vector3.zero;
         SpriteRenderer iconRenderer = icon.AddComponent<SpriteRenderer>();
         iconRenderer.sprite = iconSprite;
-        iconRenderer.color = Color.black;
-        FitSpriteRenderer(icon.transform, iconRenderer, new Vector2(0.62f, 0.62f), true);
+        iconRenderer.color = Color.white;
+        FitSpriteRenderer(icon.transform, iconRenderer, Vector2.one, true);
+    }
+
+    private static void SetBrightnessDragVisual(GameObject target, bool dragging)
+    {
+        if (target == null)
+        {
+            return;
+        }
+
+        Transform dragVisual = target.transform.Find("BrightnessDragVisual");
+        if (dragVisual != null)
+        {
+            dragVisual.gameObject.SetActive(dragging);
+        }
+
+        Transform track = target.transform.Find("Track");
+        if (track != null)
+        {
+            track.gameObject.SetActive(!dragging);
+        }
+        Transform trackRight = target.transform.Find("TrackRight");
+        if (trackRight != null)
+        {
+            trackRight.gameObject.SetActive(false);
+        }
+        Transform handle = target.transform.Find("Handle");
+        if (handle != null)
+        {
+            handle.gameObject.SetActive(!dragging);
+        }
     }
 
     private GameObject CreateSolidWorldVisual(
@@ -2390,7 +2843,13 @@ public class BlockManager : MonoBehaviour
         bool isMoveRight = string.Equals(blockName, "MoveR", StringComparison.OrdinalIgnoreCase);
         bool isMoveLeft = string.Equals(blockName, "MoveL", StringComparison.OrdinalIgnoreCase);
         bool isJump = string.Equals(blockName, "Jump", StringComparison.OrdinalIgnoreCase);
-        if (!isMoveRight && !isMoveLeft && !isJump)
+        bool isPause = definition.isPauseBlock ||
+                       string.Equals(blockName, "Stop", StringComparison.OrdinalIgnoreCase);
+        bool isRetry = definition.isRetryBlock ||
+                       string.Equals(blockName, "RetryBlock", StringComparison.OrdinalIgnoreCase);
+        bool isSave = definition.isSaveBlock ||
+                      string.Equals(blockName, "Save", StringComparison.OrdinalIgnoreCase);
+        if (!isMoveRight && !isMoveLeft && !isJump && !isPause && !isRetry && !isSave)
         {
             return;
         }
@@ -2445,10 +2904,31 @@ public class BlockManager : MonoBehaviour
             MoveL moveLeft = template.AddComponent<MoveL>();
             moveLeft.Configure(playerBody, definition.moveSpeed);
         }
-        else
+        else if (isJump)
         {
             Jump jump = template.AddComponent<Jump>();
             jump.Configure(playerBody, definition.jumpPower);
+        }
+        else if (isPause)
+        {
+            PauseBlock pauseBlock = template.AddComponent<PauseBlock>();
+            pauseBlock.Configure(this, renderer, renderer.sprite, definition.pausePlaySprite);
+        }
+        else if (isRetry)
+        {
+            RetryBlock retryBlock = template.AddComponent<RetryBlock>();
+            retryBlock.Configure(stageManager);
+        }
+        else
+        {
+            SaveBlock saveBlock = template.AddComponent<SaveBlock>();
+            saveBlock.Configure(
+                playerBody,
+                playerRenderer,
+                playerBody != null ? playerBody.GetComponent<Player>() : null,
+                renderer,
+                renderer.sprite,
+                definition.saveLoadSprite);
         }
 
         definition.worldTemplate = template;
@@ -2852,8 +3332,29 @@ public class BlockManager : MonoBehaviour
     private static Transform GetSourceTransform(BlockDefinition definition) =>
         GetSourceObject(definition).transform;
 
-    private static void SetSourceActive(BlockDefinition definition, bool active) =>
-        GetSourceObject(definition).SetActive(active);
+    private static void SetSourceActive(BlockDefinition definition, bool active)
+    {
+        int additionalCount = definition.additionalDragSources?.Length ?? 0;
+        int totalSourceCount = 1 + additionalCount;
+        int visibleCount = active
+            ? definition.availableCount < 0
+                ? totalSourceCount
+                : Mathf.Clamp(
+                    definition.availableCount - definition.usedCount,
+                    0,
+                    totalSourceCount)
+            : 0;
+
+        GetSourceObject(definition).SetActive(visibleCount > 0);
+        for (int i = 0; i < additionalCount; i++)
+        {
+            RectTransform source = definition.additionalDragSources[i];
+            if (source != null)
+            {
+                source.gameObject.SetActive(i + 1 < visibleCount);
+            }
+        }
+    }
 
     private static Camera GetUiCamera(RectTransform source)
     {
@@ -2870,6 +3371,7 @@ public class BlockManager : MonoBehaviour
         foreach (SpriteRenderer spriteRenderer in previewRenderers)
         {
             previewOriginalColors.Add(spriteRenderer.color);
+            spriteRenderer.sortingLayerName = UiForegroundSortingLayer;
             spriteRenderer.sortingOrder = draggedBlockSortingOrder;
         }
     }
@@ -2883,6 +3385,7 @@ public class BlockManager : MonoBehaviour
         foreach (SpriteRenderer spriteRenderer in gridPreviewRenderers)
         {
             gridPreviewOriginalColors.Add(spriteRenderer.color);
+            spriteRenderer.sortingLayerName = UiForegroundSortingLayer;
             spriteRenderer.sortingOrder = gridPreviewSortingOrder;
         }
 
@@ -3026,15 +3529,22 @@ public class BlockManager : MonoBehaviour
             Destroy(runtimeVariableBlockCircleTexture);
         }
 
+        if (playerStopFrictionlessMaterial != null)
+        {
+            Destroy(playerStopFrictionlessMaterial);
+        }
+
     }
 
     private void OnDisable()
     {
+        SetPlayerStopped(false);
         EndPlacedBlockOperation();
         StopBgmHandlePlayerMotion();
         activeBgmScrollBar = null;
         pressedPlayModeBlock = null;
         isPlayerAttachedToBgmHandle = false;
+        IsPlayerCrushedByScrollBar = false;
         HideAllPlayModeHoverOutlines();
         hoveredPlacedBlockForSound = null;
         hoveredSourceBlockForSound = null;

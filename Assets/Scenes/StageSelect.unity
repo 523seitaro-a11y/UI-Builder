@@ -3573,6 +3573,14 @@ MonoBehaviour:
   jumpVolume: 1
   deathClip: {fileID: 8300000, guid: a80a3438b7fb2b74aa90ec4632c81088, type: 3}
   deathVolume: 1
+  keyCollectClip: {fileID: 8300000, guid: 96ac5fc075b481646b857503076cb4c5, type: 3}
+  keyCollectVolume: 1
+  goalUnlockClip: {fileID: 8300000, guid: 09a2e11d85c94b244bb9df7d63c4370f, type: 3}
+  goalUnlockVolume: 1
+  goalSpriteChangeClip: {fileID: 8300000, guid: 627bdd739ea2aaa4c8ca286f10e3cb72, type: 3}
+  goalSpriteChangeVolume: 1
+  stageClearClip: {fileID: 8300000, guid: 849316a1055243447967ea18f44acb15, type: 3}
+  stageClearVolume: 1
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

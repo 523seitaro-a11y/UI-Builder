@@ -4,10 +4,8 @@ TextureImporter:
   internalIDToNameTable:
   - first:
       213: 5946004902017328153
-    second: BrightnessPalette
-  - first:
-      213: -2207221798236463320
-    second: BrightnessIcon
+    second: Brightness_0
+  externalObjects: {}
   serializedVersion: 13
   mipmaps:
     mipMapMode: 0
@@ -53,7 +51,7 @@ TextureImporter:
   spriteMeshType: 1
   alignment: 0
   spritePivot: {x: 0.5, y: 0.5}
-  spritePixelsToUnits: 100
+  spritePixelsToUnits: 500
   spriteBorder: {x: 0, y: 0, z: 0, w: 0}
   spriteGenerateFallbackPhysicsShape: 1
   alphaUsage: 1
@@ -115,15 +113,15 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: BrightnessPalette
+      name: Brightness_0
       rect:
         serializedVersion: 2
-        x: 177
-        y: 137
-        width: 898
-        height: 201
+        x: 0
+        y: 0
+        width: 500
+        height: 500
       alignment: 0
-      pivot: {x: 0.5, y: 0.5}
+      pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
@@ -132,28 +130,6 @@ TextureImporter:
       bones: []
       spriteID: 914697184f3748250800000000000000
       internalID: 5946004902017328153
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
-    - serializedVersion: 2
-      name: BrightnessIcon
-      rect:
-        serializedVersion: 2
-        x: 210
-        y: 358
-        width: 843
-        height: 787
-      alignment: 0
-      pivot: {x: 0.5, y: 0.5}
-      border: {x: 0, y: 0, z: 0, w: 0}
-      customData: 
-      outline: []
-      physicsShape: []
-      tessellationDetail: -1
-      bones: []
-      spriteID: 82fdd97087f5e51e0800000000000000
-      internalID: -2207221798236463320
       vertices: []
       indices: 
       edges: []
@@ -172,8 +148,7 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      BrightnessPalette: 5946004902017328153
-      BrightnessIcon: -2207221798236463320
+      Brightness_0: 5946004902017328153
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

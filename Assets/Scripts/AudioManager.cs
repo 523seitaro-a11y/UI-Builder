@@ -72,6 +72,26 @@ public sealed class AudioManager : MonoBehaviour
     [Range(0f, 1f)]
     [SerializeField] private float deathVolume = 1f;
 
+    [Tooltip("プレイヤーが鍵を取得した瞬間に再生する音です。")]
+    [SerializeField] private AudioClip keyCollectClip;
+    [Range(0f, 1f)]
+    [SerializeField] private float keyCollectVolume = 1f;
+
+    [Tooltip("鍵取得演出の完了後、ゴールのロックが解除されたときに再生する音です。")]
+    [SerializeField] private AudioClip goalUnlockClip;
+    [Range(0f, 1f)]
+    [SerializeField] private float goalUnlockVolume = 1f;
+
+    [Tooltip("ゴール後、ゴールのスプライトがクリア表示へ変わる瞬間に再生する音です。")]
+    [SerializeField] private AudioClip goalSpriteChangeClip;
+    [Range(0f, 1f)]
+    [SerializeField] private float goalSpriteChangeVolume = 1f;
+
+    [Tooltip("ステージクリアが確定し、リザルトへ移行するときに再生する音です。")]
+    [SerializeField] private AudioClip stageClearClip;
+    [Range(0f, 1f)]
+    [SerializeField] private float stageClearVolume = 1f;
+
     private AudioSource audioSource;
     private AudioSource cursorAudioSource;
 
@@ -130,12 +150,19 @@ public sealed class AudioManager : MonoBehaviour
 
     public void PlayCursorSound()
     {
-        if (cursorAudioSource == null || cursorClip == null)
+        AudioClip clipToPlay = cursorClip;
+#if UNITY_WEBGL && !UNITY_EDITOR
+        // click_003.ogg is only about 10 ms long. WebGL audio conversion can
+        // consume such a short transient, so use the audible hover WAV there.
+        clipToPlay = blockHoverClip != null ? blockHoverClip : cursorClip;
+#endif
+
+        if (cursorAudioSource == null || clipToPlay == null)
         {
             return;
         }
 
-        cursorAudioSource.PlayOneShot(cursorClip, cursorVolume);
+        cursorAudioSource.PlayOneShot(clipToPlay, cursorVolume);
     }
 
     public void PlayBlockPlacementSound()
@@ -228,6 +255,46 @@ public sealed class AudioManager : MonoBehaviour
         cursorAudioSource.PlayOneShot(deathClip, deathVolume);
     }
 
+    public void PlayKeyCollectSound()
+    {
+        if (cursorAudioSource == null || keyCollectClip == null)
+        {
+            return;
+        }
+
+        cursorAudioSource.PlayOneShot(keyCollectClip, keyCollectVolume);
+    }
+
+    public void PlayGoalUnlockSound()
+    {
+        if (cursorAudioSource == null || goalUnlockClip == null)
+        {
+            return;
+        }
+
+        cursorAudioSource.PlayOneShot(goalUnlockClip, goalUnlockVolume);
+    }
+
+    public void PlayGoalSpriteChangeSound()
+    {
+        if (cursorAudioSource == null || goalSpriteChangeClip == null)
+        {
+            return;
+        }
+
+        cursorAudioSource.PlayOneShot(goalSpriteChangeClip, goalSpriteChangeVolume);
+    }
+
+    public void PlayStageClearSound()
+    {
+        if (cursorAudioSource == null || stageClearClip == null)
+        {
+            return;
+        }
+
+        cursorAudioSource.PlayOneShot(stageClearClip, stageClearVolume);
+    }
+
     public void SetBgmVolume(float volume)
     {
         bgmVolume = Mathf.Clamp01(volume);
@@ -267,6 +334,10 @@ public sealed class AudioManager : MonoBehaviour
         gameStartVolume = Mathf.Clamp01(gameStartVolume);
         jumpVolume = Mathf.Clamp01(jumpVolume);
         deathVolume = Mathf.Clamp01(deathVolume);
+        keyCollectVolume = Mathf.Clamp01(keyCollectVolume);
+        goalUnlockVolume = Mathf.Clamp01(goalUnlockVolume);
+        goalSpriteChangeVolume = Mathf.Clamp01(goalSpriteChangeVolume);
+        stageClearVolume = Mathf.Clamp01(stageClearVolume);
         if (TryGetComponent(out AudioSource source))
         {
             audioSource = source;

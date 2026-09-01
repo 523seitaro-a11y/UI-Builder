@@ -9,6 +9,8 @@ using UnityEngine.UI;
 /// </summary>
 public class CanvasManager : MonoBehaviour
 {
+    private const float GameStartPanelPositionY = 1000f;
+
     [Header("参照")]
     [Tooltip("ドラッグ状態を監視するBlockManagerです。")]
     [SerializeField] private BlockManager blockManager;
@@ -192,10 +194,8 @@ public class CanvasManager : MonoBehaviour
         wereRequiredBlocksPlaced = placementComplete;
         if (placementComplete)
         {
-            // 最初の1個を置いたときだけSTARTを見せる。一覧へ戻した後の追加配置では
-            // isBlockListVisibleを維持し、続けて別のブロックを選べるようにする。
+            // 表示内容だけをSTARTへ切り替える。手動で選んだup/down状態は維持する。
             isBlockListVisible = false;
-            isManuallyRaised = false;
         }
         else
         {
@@ -212,16 +212,7 @@ public class CanvasManager : MonoBehaviour
     public void ToggleUpperPanel()
     {
         bool wasRaised = ShouldRaisePanel;
-
-        if (AreRequiredBlocksPlaced)
-        {
-            isBlockListVisible = !isBlockListVisible;
-            isManuallyRaised = false;
-        }
-        else
-        {
-            isManuallyRaised = !isManuallyRaised;
-        }
+        isManuallyRaised = !isManuallyRaised;
 
         bool raisePanel = ShouldRaisePanel;
 
@@ -264,23 +255,26 @@ public class CanvasManager : MonoBehaviour
 
         panelTween?.Kill();
         Vector2 targetPosition = originalAnchoredPosition;
-        bool placementComplete = AreRequiredBlocksPlaced;
+        bool showsGameStart = AreRequiredBlocksPlaced && !isBlockListVisible;
         if (raisePanel)
         {
             targetPosition.y = upPanelPositionY;
         }
-        else if (!placementComplete || isBlockListVisible)
+        else if (showsGameStart)
+        {
+            targetPosition.y = GameStartPanelPositionY;
+        }
+        else
         {
             targetPosition.y = downPanelPositionY;
         }
 
-        bool targetShowsBlockList = !raisePanel && (!placementComplete || isBlockListVisible);
         ApplyPanelContentVisibility();
 
         if (!animate || Vector2.SqrMagnitude(upperBlockPanel.anchoredPosition - targetPosition) < 0.01f)
         {
             upperBlockPanel.anchoredPosition = targetPosition;
-            ApplySwitchSprite(useUpSprite: targetShowsBlockList);
+            ApplySwitchSprite(useUpSprite: !raisePanel);
             return;
         }
 
@@ -296,7 +290,7 @@ public class CanvasManager : MonoBehaviour
             .SetLink(gameObject)
             .OnComplete(() =>
             {
-                ApplySwitchSprite(useUpSprite: targetShowsBlockList);
+                ApplySwitchSprite(useUpSprite: !raisePanel);
             });
     }
 

@@ -12,6 +12,7 @@ using UnityEngine.UI;
 public class StageManager : MonoBehaviour
 {
     private const float ClosedDeathIrisRadius = -0.01f;
+    private const float BuildModePlayerYOffset = -0.03f;
 
     public enum StageMode
     {
@@ -87,23 +88,29 @@ public class StageManager : MonoBehaviour
     [Header("鍵アニメーション")]
     [Tooltip("待機中に鍵が上下する片側の距離です。")]
     [Min(0f)]
-    [SerializeField] private float keyFloatDistance = 0.12f;
+    [SerializeField] private float keyFloatDistance = 0.08f;
 
     [Tooltip("鍵が中央から上端へ移動する時間です。")]
     [Min(0.01f)]
     [SerializeField] private float keyFloatHalfDuration = 0.8f;
 
-    [SerializeField] private Ease keyFloatEase = Ease.InOutSine;
-
-    [Tooltip("獲得時に鍵が拡大する倍率です。")]
-    [Min(1f)]
-    [SerializeField] private float keyCollectScale = 1.5f;
-
-    [Tooltip("獲得時の拡大とフェードアウトにかける時間です。")]
+    [Tooltip("鍵取得後、配置セルの1マス上へ移動する時間です。")]
     [Min(0f)]
     [SerializeField] private float keyCollectDuration = 0.25f;
 
-    [SerializeField] private Ease keyCollectEase = Ease.OutCubic;
+    [Tooltip("1マス上へ移動した鍵が、その位置で待機する時間です。")]
+    [Min(0f)]
+    [SerializeField] private float keyCollectWaitDuration = 0.5f;
+
+    [Tooltip("待機後、鍵がゴールへ向かう移動速度です。")]
+    [Min(0.01f)]
+    [SerializeField] private float keyToGoalMoveSpeed = 12f;
+
+    [Tooltip("鍵が1マス上へ移動するときの緩急です。")]
+    [SerializeField] private Ease keyCollectRiseEase = Ease.InExpo;
+
+    [Tooltip("鍵がゴールへ移動するときの緩急です。")]
+    [SerializeField] private Ease keyToGoalMoveEase = Ease.InExpo;
 
     [Tooltip("鍵を取得するまでゴールに表示するRock0スプライトです。")]
     [SerializeField] private Sprite goalLockedSprite;
@@ -261,7 +268,7 @@ public class StageManager : MonoBehaviour
     private Collider2D[] retryTilemapColliders = Array.Empty<Collider2D>();
     private Sequence playerAbsorbTween;
     private Sequence goalPopTween;
-    private Sequence keyFloatTween;
+    private Tweener keyFloatTween;
     private Sequence keyCollectTween;
     private Vector2 resultHiddenPosition;
     private Vector2 pauseHiddenPosition;
@@ -271,6 +278,7 @@ public class StageManager : MonoBehaviour
     private Color keyDefaultColor = Color.white;
     private Vector3 goalDefaultScale;
     private Sprite goalDefaultSprite;
+    private int goalDefaultSortingLayerId;
     private int goalDefaultSortingOrder;
     private Material goalHoverOutlineMaterial;
     private Material deathIrisMaterial;
@@ -278,6 +286,7 @@ public class StageManager : MonoBehaviour
     private SpriteRenderer[] goalHoverOutlineRenderers = Array.Empty<SpriteRenderer>();
     private bool isKeyCollected;
     private bool isRetryTransitionPlaying;
+    private bool isPlayerRetryRequested;
     private bool isGoalClickable;
     private StageMode modeBeforePause;
     private bool blockManagerWasEnabled;
@@ -466,7 +475,11 @@ public class StageManager : MonoBehaviour
                 canceled = await UniTask.WaitUntil(
                         () => CurrentMode != StageMode.Play ||
                               (!IsPaused &&
-                               (HasPlayerFallen() || HasTouchedRetryTilemap() || HasReachedGoal())),
+                               (HasPlayerFallen() ||
+                                HasTouchedRetryTilemap() ||
+                                HasBeenCrushedByScrollBar() ||
+                                isPlayerRetryRequested ||
+                                HasReachedGoal())),
                         cancellationToken: token)
                     .SuppressCancellationThrow();
                 if (canceled)
@@ -494,6 +507,7 @@ public class StageManager : MonoBehaviour
                     return;
                 }
 
+                isPlayerRetryRequested = false;
                 if (await PlayDeathAndRestartAsync(token))
                 {
                     return;
@@ -610,6 +624,9 @@ public class StageManager : MonoBehaviour
         if (goalSpriteRenderer != null && goalClearedSprite != null)
         {
             goalSpriteRenderer.sprite = goalClearedSprite;
+            goalSpriteRenderer.sortingLayerName = "UIForeground";
+            goalSpriteRenderer.sortingOrder = goalReachedSortingOrder;
+            AudioManager.Instance?.PlayGoalSpriteChangeSound();
         }
 
     }
@@ -663,6 +680,7 @@ public class StageManager : MonoBehaviour
         bool skipDelay = false)
     {
         CurrentMode = StageMode.Result;
+        AudioManager.Instance?.PlayStageClearSound();
 
         if (blockManager != null)
         {
@@ -870,8 +888,14 @@ public class StageManager : MonoBehaviour
         return false;
     }
 
+    private bool HasBeenCrushedByScrollBar()
+    {
+        return blockManager != null && blockManager.IsPlayerCrushedByScrollBar;
+    }
+
     private void RetryPlayer()
     {
+        isPlayerRetryRequested = false;
         if (playerBody != null)
         {
             playerBody.linearVelocity = Vector2.zero;
@@ -882,6 +906,19 @@ public class StageManager : MonoBehaviour
         ResetKeyGimmick();
         ApplyPlayerStartPosition();
         Physics2D.SyncTransforms();
+    }
+
+    public void RequestPlayerRetry()
+    {
+        if (CurrentMode != StageMode.Play ||
+            IsPaused ||
+            isRetryTransitionPlaying ||
+            isPlayerRetryRequested)
+        {
+            return;
+        }
+
+        isPlayerRetryRequested = true;
     }
 
     /// <summary>
@@ -1320,6 +1357,7 @@ public class StageManager : MonoBehaviour
 
     private void EnterBuildMode()
     {
+        isPlayerRetryRequested = false;
         ResetInteractiveGoalPresentation();
         ResetKeyGimmick();
         CurrentMode = StageMode.Build;
@@ -1352,6 +1390,7 @@ public class StageManager : MonoBehaviour
     private void EnterPlayMode()
     {
         CurrentMode = StageMode.Play;
+        ApplyPlayerStartPosition();
         SetPlayerEnabled(true);
         SetBuildObjects(false);
     }
@@ -1470,6 +1509,10 @@ public class StageManager : MonoBehaviour
             new Vector3Int(playerStartCell.x, playerStartCell.y, 0));
         position.x += playerStartOffset.x;
         position.y += playerStartOffset.y;
+        if (CurrentMode == StageMode.Build)
+        {
+            position.y += BuildModePlayerYOffset;
+        }
         position.z = player.position.z;
         player.position = position;
 
@@ -1534,6 +1577,7 @@ public class StageManager : MonoBehaviour
             keyCollider.enabled = false;
         }
 
+        AudioManager.Instance?.PlayKeyCollectSound();
         PlayKeyCollectAnimation();
     }
 
@@ -1594,13 +1638,24 @@ public class StageManager : MonoBehaviour
         float centerY = key.position.y;
         float halfDuration = Mathf.Max(0.01f, keyFloatHalfDuration);
 
-        keyFloatTween = DOTween.Sequence()
-            .Append(key.DOMoveY(centerY + keyFloatDistance, halfDuration)
-                .SetEase(keyFloatEase))
-            .Append(key.DOMoveY(centerY - keyFloatDistance, halfDuration * 2f)
-                .SetEase(keyFloatEase))
-            .Append(key.DOMoveY(centerY, halfDuration)
-                .SetEase(keyFloatEase))
+        float phase = 0f;
+        keyFloatTween = DOTween.To(
+                () => phase,
+                value =>
+                {
+                    phase = value;
+                    if (key == null)
+                    {
+                        return;
+                    }
+
+                    Vector3 position = key.position;
+                    position.y = centerY + Mathf.Sin(value) * keyFloatDistance;
+                    key.position = position;
+                },
+                Mathf.PI * 2f,
+                halfDuration * 4f)
+            .SetEase(Ease.Linear)
             .SetLoops(-1, LoopType.Restart);
     }
 
@@ -1617,24 +1672,36 @@ public class StageManager : MonoBehaviour
             return;
         }
 
-        if (keyCollectDuration <= 0f)
+        Vector3 risePosition = GetKeyCollectRisePosition();
+        keyCollectTween = DOTween.Sequence();
+        if (keyCollectDuration > 0f)
         {
-            key.gameObject.SetActive(false);
-            CompleteKeyCollection();
-            return;
+            keyCollectTween.Append(
+                key.DOMove(risePosition, keyCollectDuration)
+                    .SetEase(keyCollectRiseEase));
+        }
+        else
+        {
+            keyCollectTween.AppendCallback(() =>
+            {
+                if (key != null)
+                {
+                    key.position = risePosition;
+                }
+            });
         }
 
-        keyCollectTween = DOTween.Sequence()
-            .Append(key.DOScale(
-                    keyDefaultScale * keyCollectScale,
-                    keyCollectDuration)
-                .SetEase(keyCollectEase));
+        keyCollectTween.AppendInterval(keyCollectWaitDuration);
 
-        if (keySpriteRenderer != null)
+        if (goal != null)
         {
-            keyCollectTween.Join(
-                keySpriteRenderer.DOFade(0f, keyCollectDuration)
-                    .SetEase(keyCollectEase));
+            Vector3 goalPosition = goal.position;
+            goalPosition.z = key.position.z;
+            float moveDuration = Vector3.Distance(risePosition, goalPosition) /
+                                 Mathf.Max(0.01f, keyToGoalMoveSpeed);
+            keyCollectTween.Append(
+                key.DOMove(goalPosition, moveDuration)
+                    .SetEase(keyToGoalMoveEase));
         }
 
         keyCollectTween.OnComplete(() =>
@@ -1649,10 +1716,26 @@ public class StageManager : MonoBehaviour
         });
     }
 
+    private Vector3 GetKeyCollectRisePosition()
+    {
+        if (stageTilemap == null)
+        {
+            return key.position + Vector3.up;
+        }
+
+        Vector3 position = stageTilemap.GetCellCenterWorld(
+            new Vector3Int(keyCell.x, keyCell.y + 1, 0));
+        position.x += keyOffset.x;
+        position.y += keyOffset.y;
+        position.z = key.position.z;
+        return position;
+    }
+
     private void CompleteKeyCollection()
     {
         isKeyCollected = true;
         RefreshGoalLockPresentation();
+        AudioManager.Instance?.PlayGoalUnlockSound();
 
         // 鍵のフェード完了後、ゴール表示の切り替えと既存のゴールPopを同時に開始します。
         PlayGoalPopAsync(this.GetCancellationTokenOnDestroy()).Forget();
@@ -1683,6 +1766,9 @@ public class StageManager : MonoBehaviour
         playerDefaultScale = player != null ? player.localScale : Vector3.one;
         goalDefaultScale = goal != null ? goal.localScale : Vector3.one;
         goalDefaultSprite = goalSpriteRenderer != null ? goalSpriteRenderer.sprite : null;
+        goalDefaultSortingLayerId = goalSpriteRenderer != null
+            ? goalSpriteRenderer.sortingLayerID
+            : 0;
         goalDefaultSortingOrder = goalSpriteRenderer != null
             ? goalSpriteRenderer.sortingOrder
             : 0;
@@ -1754,6 +1840,11 @@ public class StageManager : MonoBehaviour
         if (goalSpriteRenderer == null)
         {
             return;
+        }
+
+        if (!reached)
+        {
+            goalSpriteRenderer.sortingLayerID = goalDefaultSortingLayerId;
         }
 
         goalSpriteRenderer.sortingOrder = reached
@@ -1881,8 +1972,9 @@ public class StageManager : MonoBehaviour
         keyReservedCellSize.y = Mathf.Max(1, keyReservedCellSize.y);
         keyFloatDistance = Mathf.Max(0f, keyFloatDistance);
         keyFloatHalfDuration = Mathf.Max(0.01f, keyFloatHalfDuration);
-        keyCollectScale = Mathf.Max(1f, keyCollectScale);
         keyCollectDuration = Mathf.Max(0f, keyCollectDuration);
+        keyCollectWaitDuration = Mathf.Max(0f, keyCollectWaitDuration);
+        keyToGoalMoveSpeed = Mathf.Max(0.01f, keyToGoalMoveSpeed);
         playerAbsorbDuration = Mathf.Max(0f, playerAbsorbDuration);
         goalPopScale = Mathf.Max(1f, goalPopScale);
         goalPopDuration = Mathf.Max(0f, goalPopDuration);

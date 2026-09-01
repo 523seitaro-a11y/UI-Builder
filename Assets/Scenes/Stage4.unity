@@ -169,7 +169,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
-  m_Color: {r: 0, g: 0, b: 0, a: 0.39215687}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -206,6 +206,7 @@ GameObject:
   - component: {fileID: 153433567}
   - component: {fileID: 153433566}
   - component: {fileID: 153433569}
+  - component: {fileID: 153433570}
   m_Layer: 0
   m_Name: Player
   m_TagString: Untagged
@@ -310,6 +311,47 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &153433570
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 153433565}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 12adb12d7ff20b549a6c66d3598c2f0b, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  playerBody: {fileID: 153433566}
+  playerCollider: {fileID: 153433569}
+  playerRenderer: {fileID: 153433567}
+  stageManager: {fileID: 0}
+  idle0: {fileID: -5163676775561223323, guid: e31460472da39f24aad0316676c553fd, type: 3}
+  idle1: {fileID: -3781910019033479378, guid: 36499349b6320b44d9fa9a6fa6b651ed, type: 3}
+  idle0Duration: 0.4
+  idle1Duration: 0.4
+  run0: {fileID: 4975264246010571757, guid: eb01fd56697afd047bc406b8e4ecd9d8, type: 3}
+  run1: {fileID: -7930355650201923474, guid: e3359c4c42c9617418510e5d3893ed7d, type: 3}
+  run2: {fileID: -1071083020363879801, guid: 51d175c3999d80642aec4a9c86def0c9, type: 3}
+  run3: {fileID: 7474028193545773561, guid: 3483fdfbcabbd8148b0fab0807d98b3c, type: 3}
+  run0Duration: 0.1
+  run1Duration: 0.1
+  run2Duration: 0.1
+  run3Duration: 0.1
+  jump0: {fileID: -7783006422312314537, guid: 96c9de5cc25e57e4589fc54e49431b94, type: 3}
+  jump1: {fileID: -4595906555116462863, guid: d89348c91d3b2aa4bb11d7a4ec2cd7b4, type: 3}
+  jump2: {fileID: -1052045258855429294, guid: 9d04205530a463646b3e64f18d56dbcf, type: 3}
+  jump3: {fileID: -5869736473931072748, guid: 6002c1ba25d8d534ebcc39fa1dc31c63, type: 3}
+  jumpStartDuration: 0.08
+  landingDuration: 0.3
+  runSpeedThreshold: 0.05
+  apexVelocityThreshold: 0.05
+  groundCheckDistance: 0.08
+  minimumGroundNormalY: 0.5
+  groundLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
 --- !u!61 &153433569
 BoxCollider2D:
   m_ObjectHideFlags: 0
@@ -542,6 +584,12 @@ MonoBehaviour:
   keyOffset: {x: 0, y: 0}
   keyReservedCellSize: {x: 1, y: 1}
   keyCollider: {fileID: 0}
+  keySpriteRenderer: {fileID: 0}
+  keyFloatDistance: 0.08
+  keyFloatHalfDuration: 0.8
+  keyCollectScale: 1.5
+  keyCollectDuration: 0.25
+  keyCollectEase: 9
   goalLockedSprite: {fileID: 0}
   playerCollider: {fileID: 153433569}
   goalCollider: {fileID: 1531524892}
@@ -577,6 +625,7 @@ MonoBehaviour:
   retryHeight: -8
   retryTilemaps:
   - {fileID: 1923328689}
+  playerSpriteRenderer: {fileID: 153433567}
   playerDeadSprite: {fileID: -2855123688970624977, guid: 43999b936d20b794ebfdabd4538083b1, type: 3}
   deathIrisShader: {fileID: 4800000, guid: 7c6f39c2de704dddad8a290878960e1a, type: 3}
   deathIrisColor: {r: 0.23529412, g: 0.23529412, b: 0.23529412, a: 1}
@@ -896,7 +945,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
-  m_Color: {r: 0, g: 0, b: 0, a: 0.39215687}
+  m_Color: {r: 0, g: 0, b: 0, a: 0.47058824}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -5199,11 +5248,16 @@ MonoBehaviour:
     sourceVisualRoot: {fileID: 0}
     isBgmScrollBar: 0
     isBrightnessScrollBar: 0
+    isRandomStepBlock: 0
+    isUpwardDropdownBlock: 0
+    isPopupBlock: 0
+    usesDynamicCollider: 0
     moveSpeed: 5
     jumpPower: 15
     bgmTrackSource: {fileID: 0}
     bgmHandleSource: {fileID: 0}
     brightnessIconSprite: {fileID: 0}
+    brightnessScrollBarSprite: {fileID: 0}
   - displayName: MoveL
     isEnabled: 1
     dragSource: {fileID: 366870148}
@@ -5215,11 +5269,16 @@ MonoBehaviour:
     sourceVisualRoot: {fileID: 0}
     isBgmScrollBar: 0
     isBrightnessScrollBar: 0
+    isRandomStepBlock: 0
+    isUpwardDropdownBlock: 0
+    isPopupBlock: 0
+    usesDynamicCollider: 0
     moveSpeed: 5
     jumpPower: 15
     bgmTrackSource: {fileID: 0}
     bgmHandleSource: {fileID: 0}
     brightnessIconSprite: {fileID: 0}
+    brightnessScrollBarSprite: {fileID: 0}
   - displayName: Jump
     isEnabled: 0
     dragSource: {fileID: 0}
@@ -5231,11 +5290,16 @@ MonoBehaviour:
     sourceVisualRoot: {fileID: 0}
     isBgmScrollBar: 0
     isBrightnessScrollBar: 0
+    isRandomStepBlock: 0
+    isUpwardDropdownBlock: 0
+    isPopupBlock: 0
+    usesDynamicCollider: 0
     moveSpeed: 5
     jumpPower: 15
     bgmTrackSource: {fileID: 0}
     bgmHandleSource: {fileID: 0}
     brightnessIconSprite: {fileID: 0}
+    brightnessScrollBarSprite: {fileID: 0}
   - displayName: BGMScrollBar
     isEnabled: 1
     dragSource: {fileID: 1702264940}
@@ -5247,11 +5311,16 @@ MonoBehaviour:
     sourceVisualRoot: {fileID: 2062578202}
     isBgmScrollBar: 1
     isBrightnessScrollBar: 0
+    isRandomStepBlock: 0
+    isUpwardDropdownBlock: 0
+    isPopupBlock: 0
+    usesDynamicCollider: 0
     moveSpeed: 5
     jumpPower: 15
     bgmTrackSource: {fileID: 1702264941}
     bgmHandleSource: {fileID: 1267676397}
     brightnessIconSprite: {fileID: 0}
+    brightnessScrollBarSprite: {fileID: 0}
   blockAvailabilityVersion: 1
   bgmTrackRightOpacity: 0.4
   bgmTrackColor: {r: 0.4392157, g: 0.4392157, b: 0.4392157, a: 1}
@@ -5332,6 +5401,8 @@ MonoBehaviour:
   gameStartButton: {fileID: 2100000303}
   gameStartButtonImage: {fileID: 2100000304}
   gameStartButtonText: {fileID: 2100000308}
+  blockListGroup: {fileID: 0}
+  gameStartGroup: {fileID: 0}
   gameStartHoverColor: {r: 0.23529413, g: 0.23529413, b: 0.23529413, a: 1}
   gameStartHoverTextColor: {r: 1, g: 1, b: 1, a: 1}
   gameStartHoverScaleY: 1.3
@@ -5842,6 +5913,14 @@ MonoBehaviour:
   jumpVolume: 1
   deathClip: {fileID: 8300000, guid: a80a3438b7fb2b74aa90ec4632c81088, type: 3}
   deathVolume: 1
+  keyCollectClip: {fileID: 8300000, guid: 96ac5fc075b481646b857503076cb4c5, type: 3}
+  keyCollectVolume: 1
+  goalUnlockClip: {fileID: 8300000, guid: 09a2e11d85c94b244bb9df7d63c4370f, type: 3}
+  goalUnlockVolume: 1
+  goalSpriteChangeClip: {fileID: 8300000, guid: 627bdd739ea2aaa4c8ca286f10e3cb72, type: 3}
+  goalSpriteChangeVolume: 1
+  stageClearClip: {fileID: 8300000, guid: 849316a1055243447967ea18f44acb15, type: 3}
+  stageClearVolume: 1
 --- !u!114 &2100000801
 MonoBehaviour:
   m_ObjectHideFlags: 0
