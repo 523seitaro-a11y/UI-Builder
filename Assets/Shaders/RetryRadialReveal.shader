@@ -30,16 +30,33 @@ Shader "UIBuilder/RetryRadialReveal"
         Cull Off
         Lighting Off
         ZWrite Off
+        ZTest [unity_GUIZTestMode]
         Blend One OneMinusSrcAlpha
 
         Pass
         {
             CGPROGRAM
-            #pragma vertex SpriteVert
+            #pragma vertex RetryVert
             #pragma fragment RetryRadialFrag
             #pragma target 2.0
-            #pragma multi_compile_instancing
-            #include "UnitySprites.cginc"
+            #include "UnityCG.cginc"
+
+            struct appdata
+            {
+                float4 vertex : POSITION;
+                float2 texcoord : TEXCOORD0;
+                fixed4 color : COLOR;
+            };
+
+            struct v2f
+            {
+                float4 vertex : SV_POSITION;
+                float2 texcoord : TEXCOORD0;
+                fixed4 color : COLOR;
+            };
+
+            sampler2D _MainTex;
+            fixed4 _Color;
 
             float _FadedAlpha;
             float _Fill;
@@ -47,9 +64,18 @@ Shader "UIBuilder/RetryRadialReveal"
             fixed4 _BeforeColor;
             fixed4 _AfterColor;
 
+            v2f RetryVert(appdata input)
+            {
+                v2f output;
+                output.vertex = UnityObjectToClipPos(input.vertex);
+                output.texcoord = input.texcoord;
+                output.color = input.color * _Color;
+                return output;
+            }
+
             fixed4 RetryRadialFrag(v2f input) : SV_Target
             {
-                fixed4 color = SampleSpriteTexture(input.texcoord) * input.color;
+                fixed4 color = tex2D(_MainTex, input.texcoord) * input.color;
                 float2 localUv = (input.texcoord - _UvRect.xy) / max(_UvRect.zw, 0.0001);
                 float2 direction = localUv - 0.5;
 

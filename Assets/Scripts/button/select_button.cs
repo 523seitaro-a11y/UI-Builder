@@ -5,53 +5,55 @@ using UnityEngine.SceneManagement;
 
 public class select_button : MonoBehaviour {
 
+    private static void LoadStage(int stageNumber)
+    {
+        string sceneName = $"Stage{stageNumber}";
+        if (!Application.CanStreamedLevelBeLoaded(sceneName))
+        {
+            Debug.LogWarning($"StageSelect: '{sceneName}' はBuild Settingsに登録されていません。");
+            return;
+        }
+
+        SceneManager.LoadScene(sceneName);
+    }
+
     public void OnSelectButtonClickStage1()
     {
-        SceneManager.LoadScene("Stage1");
+        LoadStage(1);
     }
 
     public void OnSelectButtonClickStage2()
     {
-        SceneManager.LoadScene("Stage2");
+        LoadStage(2);
     }
 
     public void OnSelectButtonClickStage3()
     {
-        SceneManager.LoadScene("Stage3");
+        LoadStage(3);
     }
 
     public void OnSelectButtonClickStage4()
     {
-        SceneManager.LoadScene("Stage4");
+        LoadStage(4);
     }
 
     public void OnSelectButtonClickStage5()
     {
-        SceneManager.LoadScene("Stage5");
+        LoadStage(5);
     }
 
-    public void OnSelectButtonClickStage10()
+    public void OnSelectButtonClickStage6()
     {
-        SceneManager.LoadScene("Stage10");
+        LoadStage(6);
     }
 
-    // public void OnSelectButtonClickStage6()
-    // {
-    //     SceneManager.LoadScene("Stage6");
-    // }
-
-    // public void OnSelectButtonClickStage7()
-    // {
-    //     SceneManager.LoadScene("Stage7");
-    // }
-
-    // public void OnSelectButtonClickStage8()
-    // {
-    //     SceneManager.LoadScene("Stage8");
-    // }
-
-    // public void OnSelectButtonClickStage9()
-    // {
-    //     SceneManager.LoadScene("Stage9");
-    // }
+    public void OnSelectButtonClickStage7() => LoadStage(7);
+    public void OnSelectButtonClickStage8() => LoadStage(8);
+    public void OnSelectButtonClickStage9() => LoadStage(9);
+    public void OnSelectButtonClickStage10() => LoadStage(10);
+    public void OnSelectButtonClickStage11() => LoadStage(11);
+    public void OnSelectButtonClickStage12() => LoadStage(12);
+    public void OnSelectButtonClickStage13() => LoadStage(13);
+    public void OnSelectButtonClickStage14() => LoadStage(14);
+    public void OnSelectButtonClickStage15() => LoadStage(15);
 }

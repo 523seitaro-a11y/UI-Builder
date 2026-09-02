@@ -119,14 +119,39 @@ public class MoveR : MonoBehaviour, BlockManager.IBlockOperationState
     private bool IsTouchingWallInMoveDirection(Vector2 moveDirection)
     {
         int contactCount = playerBody.GetContacts(contactPoints);
+        Collider2D playerCollider = playerBody.GetComponent<Collider2D>();
+        float footContactLimit = playerCollider != null
+            ? playerCollider.bounds.min.y + Mathf.Min(0.08f, playerCollider.bounds.size.y * 0.15f)
+            : float.NegativeInfinity;
+        float seamLift = 0f;
 
         for (int i = 0; i < contactCount; i++)
         {
-            // 壁から受ける法線が移動方向と逆向きなら、その方向に壁があります。
-            if (Vector2.Dot(contactPoints[i].normal, moveDirection) < -0.5f)
+            ContactPoint2D contact = contactPoints[i];
+            if (Vector2.Dot(contact.normal, moveDirection) >= -0.5f)
+            {
+                continue;
+            }
+
+            // 同じ高さの足場同士の継ぎ目は、BoxColliderの角によって横壁として
+            // 報告されることがあります。足元だけの接触なら小さく持ち上げて通過します。
+            if (playerCollider != null && contact.point.y <= footContactLimit)
+            {
+                seamLift = Mathf.Max(seamLift, Mathf.Clamp(-contact.separation + 0.01f, 0.01f, 0.05f));
+                continue;
+            }
+
+            // 足元より上で当たっている場合は本物の壁として停止します。
+            if (contact.otherCollider != null)
             {
                 return true;
             }
+        }
+
+        if (seamLift > 0f)
+        {
+            playerBody.position += Vector2.up * seamLift;
+            playerBody.WakeUp();
         }
 
         return false;

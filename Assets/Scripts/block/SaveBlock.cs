@@ -14,6 +14,9 @@ public sealed class SaveBlock : MonoBehaviour,
     [SerializeField] private SpriteRenderer blockRenderer;
     [SerializeField] private Sprite saveSprite;
     [SerializeField] private Sprite loadSprite;
+    [SerializeField] private Sprite compactSaveSprite;
+    [SerializeField] private Sprite compactLoadSprite;
+    [SerializeField] private BigUiBlock bigUiBlock;
     [Range(0f, 1f)] [SerializeField] private float ghostOpacity = 0.4f;
     [Min(0f)] [SerializeField] private float ghostOverlapHideDistance = 0.05f;
 
@@ -37,7 +40,9 @@ public sealed class SaveBlock : MonoBehaviour,
         Player targetAnimation,
         SpriteRenderer targetBlockRenderer,
         Sprite saveStateSprite,
-        Sprite loadStateSprite)
+        Sprite loadStateSprite,
+        Sprite compactSaveStateSprite = null,
+        Sprite compactLoadStateSprite = null)
     {
         playerBody = targetBody;
         playerRenderer = targetPlayerRenderer;
@@ -45,6 +50,8 @@ public sealed class SaveBlock : MonoBehaviour,
         blockRenderer = targetBlockRenderer;
         saveSprite = saveStateSprite;
         loadSprite = loadStateSprite;
+        compactSaveSprite = compactSaveStateSprite;
+        compactLoadSprite = compactLoadStateSprite;
         ApplyBlockSprite();
     }
 
@@ -63,6 +70,7 @@ public sealed class SaveBlock : MonoBehaviour,
         }
 
         blockRenderer ??= GetComponentInChildren<SpriteRenderer>(true);
+        bigUiBlock ??= GetComponent<BigUiBlock>();
         saveSprite ??= blockRenderer != null ? blockRenderer.sprite : null;
         ApplyBlockSprite();
     }
@@ -122,11 +130,16 @@ public sealed class SaveBlock : MonoBehaviour,
 
     public void OnPlayModeEntered()
     {
-        ClearSavedState();
-        ApplyBlockSprite();
+        ResetSavedState();
     }
 
     public void OnBuildModeEntered()
+    {
+        ResetSavedState();
+    }
+
+    /// <summary>保存内容と残像を破棄し、ブロックをSave表示に戻します。</summary>
+    public void ResetSavedState()
     {
         ClearSavedState();
         ApplyBlockSprite();
@@ -283,6 +296,14 @@ public sealed class SaveBlock : MonoBehaviour,
     private void ClearSavedState()
     {
         hasSavedState = false;
+        savedPosition = Vector2.zero;
+        savedRotation = 0f;
+        savedVelocity = Vector2.zero;
+        savedAngularVelocity = 0f;
+        savedPlayerSprite = null;
+        savedFlipX = false;
+        savedFlipY = false;
+        savedAnimation = default;
         DestroyPlayerGhost();
     }
 
@@ -290,6 +311,7 @@ public sealed class SaveBlock : MonoBehaviour,
     {
         if (playerGhost != null)
         {
+            playerGhost.SetActive(false);
             Destroy(playerGhost);
             playerGhost = null;
         }
@@ -303,6 +325,14 @@ public sealed class SaveBlock : MonoBehaviour,
         }
 
         Sprite sprite = hasSavedState ? loadSprite : saveSprite;
+        bigUiBlock ??= GetComponent<BigUiBlock>();
+        if (bigUiBlock != null)
+        {
+            Sprite compactSprite = hasSavedState ? compactLoadSprite : compactSaveSprite;
+            bigUiBlock.SetStateSprites(sprite, compactSprite);
+            return;
+        }
+
         if (sprite != null)
         {
             blockRenderer.sprite = sprite;
@@ -311,7 +341,6 @@ public sealed class SaveBlock : MonoBehaviour,
 
     private void OnDisable()
     {
-        ClearSavedState();
-        ApplyBlockSprite();
+        ResetSavedState();
     }
 }

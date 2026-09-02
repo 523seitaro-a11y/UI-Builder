@@ -276,6 +276,11 @@ public class StageManager : MonoBehaviour
     private Sprite playerDefaultSprite;
     private Vector3 keyDefaultScale;
     private Color keyDefaultColor = Color.white;
+    private Canvas keyAnimationOverlayCanvas;
+    private Image keyAnimationOverlayImage;
+    private Camera keyAnimationCamera;
+    private bool isKeyAnimationOverlayActive;
+    private bool keySpriteRendererWasEnabled;
     private Vector3 goalDefaultScale;
     private Sprite goalDefaultSprite;
     private int goalDefaultSortingLayerId;
@@ -325,6 +330,14 @@ public class StageManager : MonoBehaviour
     }
 
     private void Start() => RunStageAsync(this.GetCancellationTokenOnDestroy()).Forget();
+
+    private void LateUpdate()
+    {
+        if (isKeyAnimationOverlayActive)
+        {
+            UpdateKeyAnimationOverlay();
+        }
+    }
 
     private void FixedUpdate()
     {
@@ -929,6 +942,7 @@ public class StageManager : MonoBehaviour
     {
         AudioManager.Instance?.PlayDeathSound();
         StopPlayerForDeath();
+        blockManager?.ResetSavedPlayerStates();
         SetPlayerSprite(playerDeadSprite);
         PlayDeathPopAnimation();
 
@@ -1413,6 +1427,11 @@ public class StageManager : MonoBehaviour
         {
             player.gameObject.SetActive(true);
             player.localScale = playerDefaultScale;
+
+            if (!enabled)
+            {
+                player.GetComponent<Player>()?.ResetToIdle();
+            }
         }
 
         if (playerCollider != null)
@@ -1672,6 +1691,8 @@ public class StageManager : MonoBehaviour
             return;
         }
 
+        ShowKeyAnimationAboveUi();
+
         Vector3 risePosition = GetKeyCollectRisePosition();
         keyCollectTween = DOTween.Sequence();
         if (keyCollectDuration > 0f)
@@ -1707,6 +1728,7 @@ public class StageManager : MonoBehaviour
         keyCollectTween.OnComplete(() =>
         {
             keyCollectTween = null;
+            HideKeyAnimationOverlay();
             if (key != null)
             {
                 key.gameObject.SetActive(false);
@@ -1747,6 +1769,136 @@ public class StageManager : MonoBehaviour
         keyFloatTween = null;
         keyCollectTween?.Kill();
         keyCollectTween = null;
+        HideKeyAnimationOverlay();
+    }
+
+    private void ShowKeyAnimationAboveUi()
+    {
+        if (key == null || keySpriteRenderer == null || keySpriteRenderer.sprite == null)
+        {
+            return;
+        }
+
+        keyAnimationCamera = Camera.main;
+        if (keyAnimationCamera == null)
+        {
+            return;
+        }
+
+        EnsureKeyAnimationOverlay();
+        keyAnimationOverlayImage.sprite = keySpriteRenderer.sprite;
+        keyAnimationOverlayImage.color = keySpriteRenderer.color;
+        keyAnimationOverlayImage.enabled = true;
+        keyAnimationOverlayCanvas.gameObject.SetActive(true);
+
+        keySpriteRendererWasEnabled = keySpriteRenderer.enabled;
+        keySpriteRenderer.enabled = false;
+        isKeyAnimationOverlayActive = true;
+        UpdateKeyAnimationOverlay();
+    }
+
+    private void EnsureKeyAnimationOverlay()
+    {
+        if (keyAnimationOverlayCanvas != null && keyAnimationOverlayImage != null)
+        {
+            return;
+        }
+
+        GameObject canvasObject = new GameObject(
+            "KeyAnimationOverlay",
+            typeof(RectTransform),
+            typeof(Canvas));
+        canvasObject.transform.SetParent(transform, false);
+
+        keyAnimationOverlayCanvas = canvasObject.GetComponent<Canvas>();
+        keyAnimationOverlayCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        keyAnimationOverlayCanvas.overrideSorting = true;
+        keyAnimationOverlayCanvas.sortingOrder = short.MaxValue;
+
+        GameObject imageObject = new GameObject(
+            "Key",
+            typeof(RectTransform),
+            typeof(CanvasRenderer),
+            typeof(Image));
+        imageObject.transform.SetParent(canvasObject.transform, false);
+
+        keyAnimationOverlayImage = imageObject.GetComponent<Image>();
+        keyAnimationOverlayImage.raycastTarget = false;
+        keyAnimationOverlayImage.preserveAspect = false;
+    }
+
+    private void UpdateKeyAnimationOverlay()
+    {
+        if (key == null ||
+            keySpriteRenderer == null ||
+            keySpriteRenderer.sprite == null ||
+            keyAnimationCamera == null ||
+            keyAnimationOverlayCanvas == null ||
+            keyAnimationOverlayImage == null)
+        {
+            return;
+        }
+
+        Sprite sprite = keySpriteRenderer.sprite;
+        Bounds spriteBounds = sprite.bounds;
+        Transform spriteTransform = keySpriteRenderer.transform;
+        Vector3 worldCenter = spriteTransform.TransformPoint(spriteBounds.center);
+        Vector3 screenCenter = keyAnimationCamera.WorldToScreenPoint(worldCenter);
+
+        RectTransform canvasRect = (RectTransform)keyAnimationOverlayCanvas.transform;
+        RectTransform imageRect = keyAnimationOverlayImage.rectTransform;
+        if (screenCenter.z <= 0f ||
+            !RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                canvasRect,
+                screenCenter,
+                null,
+                out Vector2 localPoint))
+        {
+            keyAnimationOverlayImage.enabled = false;
+            return;
+        }
+
+        Vector3 worldLeft = spriteTransform.TransformPoint(
+            spriteBounds.center - Vector3.right * spriteBounds.extents.x);
+        Vector3 worldRight = spriteTransform.TransformPoint(
+            spriteBounds.center + Vector3.right * spriteBounds.extents.x);
+        Vector3 worldBottom = spriteTransform.TransformPoint(
+            spriteBounds.center - Vector3.up * spriteBounds.extents.y);
+        Vector3 worldTop = spriteTransform.TransformPoint(
+            spriteBounds.center + Vector3.up * spriteBounds.extents.y);
+
+        float screenWidth = Vector2.Distance(
+            keyAnimationCamera.WorldToScreenPoint(worldLeft),
+            keyAnimationCamera.WorldToScreenPoint(worldRight));
+        float screenHeight = Vector2.Distance(
+            keyAnimationCamera.WorldToScreenPoint(worldBottom),
+            keyAnimationCamera.WorldToScreenPoint(worldTop));
+
+        imageRect.anchoredPosition = localPoint;
+        imageRect.sizeDelta = new Vector2(screenWidth, screenHeight);
+        imageRect.localRotation = Quaternion.Euler(0f, 0f, spriteTransform.eulerAngles.z);
+        imageRect.localScale = new Vector3(
+            keySpriteRenderer.flipX ? -1f : 1f,
+            keySpriteRenderer.flipY ? -1f : 1f,
+            1f);
+        keyAnimationOverlayImage.color = keySpriteRenderer.color;
+        keyAnimationOverlayImage.enabled = true;
+    }
+
+    private void HideKeyAnimationOverlay()
+    {
+        if (keySpriteRenderer != null && isKeyAnimationOverlayActive)
+        {
+            keySpriteRenderer.enabled = keySpriteRendererWasEnabled;
+        }
+
+        if (keyAnimationOverlayCanvas != null)
+        {
+            keyAnimationOverlayCanvas.gameObject.SetActive(false);
+        }
+
+        isKeyAnimationOverlayActive = false;
+        keyAnimationCamera = null;
     }
 
     private void RefreshGoalLockPresentation()

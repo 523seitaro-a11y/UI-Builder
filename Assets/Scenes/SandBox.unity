@@ -2184,6 +2184,7 @@ MonoBehaviour:
   playerCollider: {fileID: 153433569}
   playerRenderer: {fileID: 153433567}
   stageManager: {fileID: 335955564}
+  blockManager: {fileID: 0}
   idle0: {fileID: -5163676775561223323, guid: e31460472da39f24aad0316676c553fd, type: 3}
   idle1: {fileID: -3781910019033479378, guid: 36499349b6320b44d9fa9a6fa6b651ed, type: 3}
   idle0Duration: 0.8
@@ -2287,7 +2288,7 @@ MonoBehaviour:
     m_PressedTrigger: Pressed
     m_SelectedTrigger: Selected
     m_DisabledTrigger: Disabled
-  m_Interactable: 1
+  m_Interactable: 0
   m_TargetGraphic: {fileID: 173593371}
   m_OnClick:
     m_PersistentCalls:
@@ -2329,6 +2330,156 @@ CanvasRenderer:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 173593368}
+  m_CullTransparentMesh: 1
+--- !u!1 &273771404
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 273771405}
+  - component: {fileID: 273771407}
+  - component: {fileID: 273771406}
+  m_Layer: 5
+  m_Name: Jump_big
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &273771405
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 273771404}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2300000002}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0.5, y: 0.5}
+  m_AnchorMax: {x: 0.5, y: 0.5}
+  m_AnchoredPosition: {x: 105, y: -339}
+  m_SizeDelta: {x: 600, y: 300}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &273771406
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 273771404}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_Material: {fileID: 0}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
+  m_RaycastTarget: 1
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_Sprite: {fileID: -8504349288874202694, guid: 618901c446563804fb7ee7c92193cea4, type: 3}
+  m_Type: 0
+  m_PreserveAspect: 1
+  m_FillCenter: 1
+  m_FillMethod: 4
+  m_FillAmount: 1
+  m_FillClockwise: 1
+  m_FillOrigin: 0
+  m_UseSpriteMesh: 0
+  m_PixelsPerUnitMultiplier: 1
+--- !u!222 &273771407
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 273771404}
+  m_CullTransparentMesh: 1
+--- !u!1 &301135291
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 301135292}
+  - component: {fileID: 301135294}
+  - component: {fileID: 301135293}
+  m_Layer: 5
+  m_Name: MoveR_big
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &301135292
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 301135291}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2300000002}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0.5, y: 0.5}
+  m_AnchorMax: {x: 0.5, y: 0.5}
+  m_AnchoredPosition: {x: -108, y: -470}
+  m_SizeDelta: {x: 300, y: 300}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &301135293
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 301135291}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_Material: {fileID: 0}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
+  m_RaycastTarget: 1
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_Sprite: {fileID: 7939292477868262640, guid: b5f0a085e3278f94badb7de6649f05f7, type: 3}
+  m_Type: 0
+  m_PreserveAspect: 1
+  m_FillCenter: 1
+  m_FillMethod: 4
+  m_FillAmount: 1
+  m_FillClockwise: 1
+  m_FillOrigin: 0
+  m_UseSpriteMesh: 0
+  m_PixelsPerUnitMultiplier: 1
+--- !u!222 &301135294
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 301135291}
   m_CullTransparentMesh: 1
 --- !u!1 &335955562
 GameObject:
@@ -3958,8 +4109,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 906, y: -723}
-  m_SizeDelta: {x: 90, y: 90}
+  m_AnchoredPosition: {x: 911.3, y: -616.3}
+  m_SizeDelta: {x: 80, y: 80}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &899410891
 MonoBehaviour:
@@ -3974,7 +4125,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
-  m_Color: {r: 0, g: 0, b: 0, a: 0.47058824}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -4782,6 +4933,81 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1121711645}
   m_CullTransparentMesh: 1
+--- !u!1 &1127072762
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1127072763}
+  - component: {fileID: 1127072765}
+  - component: {fileID: 1127072764}
+  m_Layer: 5
+  m_Name: Size
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &1127072763
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1127072762}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2300000002}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0.5, y: 0.5}
+  m_AnchorMax: {x: 0.5, y: 0.5}
+  m_AnchoredPosition: {x: -510, y: -339}
+  m_SizeDelta: {x: 200, y: 100}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &1127072764
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1127072762}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_Material: {fileID: 0}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
+  m_RaycastTarget: 1
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_Sprite: {fileID: -1653481489409541476, guid: d397774af8d869446b9160b51f4a0873, type: 3}
+  m_Type: 0
+  m_PreserveAspect: 0
+  m_FillCenter: 1
+  m_FillMethod: 4
+  m_FillAmount: 1
+  m_FillClockwise: 1
+  m_FillOrigin: 0
+  m_UseSpriteMesh: 0
+  m_PixelsPerUnitMultiplier: 1
+--- !u!222 &1127072765
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1127072762}
+  m_CullTransparentMesh: 1
 --- !u!1 &1203662029
 GameObject:
   m_ObjectHideFlags: 0
@@ -4976,7 +5202,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1267676395}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
   m_Name: 
@@ -5139,6 +5365,81 @@ CanvasRenderer:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1385914209}
+  m_CullTransparentMesh: 1
+--- !u!1 &1389263274
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1389263275}
+  - component: {fileID: 1389263277}
+  - component: {fileID: 1389263276}
+  m_Layer: 5
+  m_Name: MoveL_big
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &1389263275
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1389263274}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 2300000002}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0.5, y: 0.5}
+  m_AnchorMax: {x: 0.5, y: 0.5}
+  m_AnchoredPosition: {x: -449, y: -574}
+  m_SizeDelta: {x: 300, y: 300}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &1389263276
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1389263274}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_Material: {fileID: 0}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
+  m_RaycastTarget: 1
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_Sprite: {fileID: -4685780485473771385, guid: 13002ab8eeacd414490d83cc4ffff6fe, type: 3}
+  m_Type: 0
+  m_PreserveAspect: 1
+  m_FillCenter: 1
+  m_FillMethod: 4
+  m_FillAmount: 1
+  m_FillClockwise: 1
+  m_FillOrigin: 0
+  m_UseSpriteMesh: 0
+  m_PixelsPerUnitMultiplier: 1
+--- !u!222 &1389263277
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1389263274}
   m_CullTransparentMesh: 1
 --- !u!1 &1400262344
 GameObject:
@@ -6734,7 +7035,7 @@ RectTransform:
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
   m_AnchoredPosition: {x: 340, y: 0}
-  m_SizeDelta: {x: 380, y: 60}
+  m_SizeDelta: {x: 400, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1702264941
 MonoBehaviour:
@@ -6749,16 +7050,16 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
-  m_Color: {r: 0.4392157, g: 0.4392157, b: 0.4392157, a: 1}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_Sprite: {fileID: 0}
+  m_Sprite: {fileID: 5548891157742276716, guid: 3e90ec232b8f08841bcdfacc45f16fe4, type: 3}
   m_Type: 0
-  m_PreserveAspect: 0
+  m_PreserveAspect: 1
   m_FillCenter: 1
   m_FillMethod: 4
   m_FillAmount: 1
@@ -7164,6 +7465,9 @@ MonoBehaviour:
     isPopupBlock: 0
     isPauseBlock: 0
     isRetryBlock: 0
+    isSaveBlock: 0
+    isBigUiBlock: 0
+    isUiSizeBlock: 0
     usesDynamicCollider: 0
     moveSpeed: 5
     jumpPower: 15
@@ -7172,6 +7476,16 @@ MonoBehaviour:
     brightnessIconSprite: {fileID: 0}
     brightnessScrollBarSprite: {fileID: 0}
     pausePlaySprite: {fileID: 0}
+    saveLoadSprite: {fileID: 0}
+    compactUiSprite: {fileID: 0}
+    compactAlternateUiSprite: {fileID: 0}
+    size100Sprite: {fileID: 0}
+    size30Sprite: {fileID: 0}
+    size0Sprite: {fileID: 0}
+    size100SelectedSprite: {fileID: 0}
+    size30SelectedSprite: {fileID: 0}
+    size0SelectedSprite: {fileID: 0}
+    sizePopupSprite: {fileID: 0}
   - displayName: MoveL
     isEnabled: 1
     dragSource: {fileID: 366870148}
@@ -7189,6 +7503,9 @@ MonoBehaviour:
     isPopupBlock: 0
     isPauseBlock: 0
     isRetryBlock: 0
+    isSaveBlock: 0
+    isBigUiBlock: 0
+    isUiSizeBlock: 0
     usesDynamicCollider: 0
     moveSpeed: 5
     jumpPower: 15
@@ -7197,6 +7514,16 @@ MonoBehaviour:
     brightnessIconSprite: {fileID: 0}
     brightnessScrollBarSprite: {fileID: 0}
     pausePlaySprite: {fileID: 0}
+    saveLoadSprite: {fileID: 0}
+    compactUiSprite: {fileID: 0}
+    compactAlternateUiSprite: {fileID: 0}
+    size100Sprite: {fileID: 0}
+    size30Sprite: {fileID: 0}
+    size0Sprite: {fileID: 0}
+    size100SelectedSprite: {fileID: 0}
+    size30SelectedSprite: {fileID: 0}
+    size0SelectedSprite: {fileID: 0}
+    sizePopupSprite: {fileID: 0}
   - displayName: Jump
     isEnabled: 1
     dragSource: {fileID: 1522504042}
@@ -7214,6 +7541,9 @@ MonoBehaviour:
     isPopupBlock: 0
     isPauseBlock: 0
     isRetryBlock: 0
+    isSaveBlock: 0
+    isBigUiBlock: 0
+    isUiSizeBlock: 0
     usesDynamicCollider: 0
     moveSpeed: 5
     jumpPower: 15
@@ -7222,6 +7552,16 @@ MonoBehaviour:
     brightnessIconSprite: {fileID: 0}
     brightnessScrollBarSprite: {fileID: 0}
     pausePlaySprite: {fileID: 0}
+    saveLoadSprite: {fileID: 0}
+    compactUiSprite: {fileID: 0}
+    compactAlternateUiSprite: {fileID: 0}
+    size100Sprite: {fileID: 0}
+    size30Sprite: {fileID: 0}
+    size0Sprite: {fileID: 0}
+    size100SelectedSprite: {fileID: 0}
+    size30SelectedSprite: {fileID: 0}
+    size0SelectedSprite: {fileID: 0}
+    sizePopupSprite: {fileID: 0}
   - displayName: BGMScrollBar
     isEnabled: 1
     dragSource: {fileID: 1702264940}
@@ -7239,6 +7579,9 @@ MonoBehaviour:
     isPopupBlock: 0
     isPauseBlock: 0
     isRetryBlock: 0
+    isSaveBlock: 0
+    isBigUiBlock: 0
+    isUiSizeBlock: 0
     usesDynamicCollider: 0
     moveSpeed: 5
     jumpPower: 15
@@ -7247,6 +7590,16 @@ MonoBehaviour:
     brightnessIconSprite: {fileID: 0}
     brightnessScrollBarSprite: {fileID: 0}
     pausePlaySprite: {fileID: 0}
+    saveLoadSprite: {fileID: 0}
+    compactUiSprite: {fileID: 0}
+    compactAlternateUiSprite: {fileID: 0}
+    size100Sprite: {fileID: 0}
+    size30Sprite: {fileID: 0}
+    size0Sprite: {fileID: 0}
+    size100SelectedSprite: {fileID: 0}
+    size30SelectedSprite: {fileID: 0}
+    size0SelectedSprite: {fileID: 0}
+    sizePopupSprite: {fileID: 0}
   - displayName: BrightnessScrollBar
     isEnabled: 1
     dragSource: {fileID: 1260112837}
@@ -7264,6 +7617,9 @@ MonoBehaviour:
     isPopupBlock: 0
     isPauseBlock: 0
     isRetryBlock: 0
+    isSaveBlock: 0
+    isBigUiBlock: 0
+    isUiSizeBlock: 0
     usesDynamicCollider: 0
     moveSpeed: 5
     jumpPower: 15
@@ -7272,6 +7628,16 @@ MonoBehaviour:
     brightnessIconSprite: {fileID: 5946004902017328153, guid: 1cd497574d0745649a93d7baa7c18510, type: 3}
     brightnessScrollBarSprite: {fileID: -272738104988616010, guid: 966b72b35e280b74cb77879e6eeaabc9, type: 3}
     pausePlaySprite: {fileID: 0}
+    saveLoadSprite: {fileID: 0}
+    compactUiSprite: {fileID: 0}
+    compactAlternateUiSprite: {fileID: 0}
+    size100Sprite: {fileID: 0}
+    size30Sprite: {fileID: 0}
+    size0Sprite: {fileID: 0}
+    size100SelectedSprite: {fileID: 0}
+    size30SelectedSprite: {fileID: 0}
+    size0SelectedSprite: {fileID: 0}
+    sizePopupSprite: {fileID: 0}
   - displayName: RandomStep
     isEnabled: 1
     dragSource: {fileID: 2201000102}
@@ -7289,6 +7655,9 @@ MonoBehaviour:
     isPopupBlock: 0
     isPauseBlock: 0
     isRetryBlock: 0
+    isSaveBlock: 0
+    isBigUiBlock: 0
+    isUiSizeBlock: 0
     usesDynamicCollider: 1
     moveSpeed: 5
     jumpPower: 15
@@ -7297,6 +7666,16 @@ MonoBehaviour:
     brightnessIconSprite: {fileID: 0}
     brightnessScrollBarSprite: {fileID: 0}
     pausePlaySprite: {fileID: 0}
+    saveLoadSprite: {fileID: 0}
+    compactUiSprite: {fileID: 0}
+    compactAlternateUiSprite: {fileID: 0}
+    size100Sprite: {fileID: 0}
+    size30Sprite: {fileID: 0}
+    size0Sprite: {fileID: 0}
+    size100SelectedSprite: {fileID: 0}
+    size30SelectedSprite: {fileID: 0}
+    size0SelectedSprite: {fileID: 0}
+    sizePopupSprite: {fileID: 0}
   - displayName: UpwardDropdown
     isEnabled: 1
     dragSource: {fileID: 2201000202}
@@ -7314,6 +7693,9 @@ MonoBehaviour:
     isPopupBlock: 0
     isPauseBlock: 0
     isRetryBlock: 0
+    isSaveBlock: 0
+    isBigUiBlock: 0
+    isUiSizeBlock: 0
     usesDynamicCollider: 1
     moveSpeed: 5
     jumpPower: 15
@@ -7322,6 +7704,16 @@ MonoBehaviour:
     brightnessIconSprite: {fileID: 0}
     brightnessScrollBarSprite: {fileID: 0}
     pausePlaySprite: {fileID: 0}
+    saveLoadSprite: {fileID: 0}
+    compactUiSprite: {fileID: 0}
+    compactAlternateUiSprite: {fileID: 0}
+    size100Sprite: {fileID: 0}
+    size30Sprite: {fileID: 0}
+    size0Sprite: {fileID: 0}
+    size100SelectedSprite: {fileID: 0}
+    size30SelectedSprite: {fileID: 0}
+    size0SelectedSprite: {fileID: 0}
+    sizePopupSprite: {fileID: 0}
   - displayName: Popup
     isEnabled: 1
     dragSource: {fileID: 2401000102}
@@ -7339,6 +7731,9 @@ MonoBehaviour:
     isPopupBlock: 1
     isPauseBlock: 0
     isRetryBlock: 0
+    isSaveBlock: 0
+    isBigUiBlock: 0
+    isUiSizeBlock: 0
     usesDynamicCollider: 1
     moveSpeed: 5
     jumpPower: 15
@@ -7347,6 +7742,168 @@ MonoBehaviour:
     brightnessIconSprite: {fileID: 0}
     brightnessScrollBarSprite: {fileID: 0}
     pausePlaySprite: {fileID: 0}
+    saveLoadSprite: {fileID: 0}
+    compactUiSprite: {fileID: 0}
+    compactAlternateUiSprite: {fileID: 0}
+    size100Sprite: {fileID: 0}
+    size30Sprite: {fileID: 0}
+    size0Sprite: {fileID: 0}
+    size100SelectedSprite: {fileID: 0}
+    size30SelectedSprite: {fileID: 0}
+    size0SelectedSprite: {fileID: 0}
+    sizePopupSprite: {fileID: 0}
+  - displayName: MoveR_big
+    isEnabled: 1
+    dragSource: {fileID: 301135292}
+    additionalDragSources: []
+    worldTemplate: {fileID: 0}
+    footprint: {x: 3, y: 3}
+    placementOffset: {x: 0, y: 0, z: 0}
+    availableCount: 1
+    hideSourceWhenExhausted: 1
+    sourceVisualRoot: {fileID: 301135291}
+    isBgmScrollBar: 0
+    isBrightnessScrollBar: 0
+    isRandomStepBlock: 0
+    isUpwardDropdownBlock: 0
+    isPopupBlock: 0
+    isPauseBlock: 0
+    isRetryBlock: 0
+    isSaveBlock: 0
+    isBigUiBlock: 1
+    isUiSizeBlock: 0
+    usesDynamicCollider: 1
+    moveSpeed: 5
+    jumpPower: 15
+    bgmTrackSource: {fileID: 0}
+    bgmHandleSource: {fileID: 0}
+    brightnessIconSprite: {fileID: 0}
+    brightnessScrollBarSprite: {fileID: 0}
+    pausePlaySprite: {fileID: 0}
+    saveLoadSprite: {fileID: 0}
+    compactUiSprite: {fileID: -145856261740534964, guid: c671fe0b0c0a2db40b6f2efa24d9977a, type: 3}
+    compactAlternateUiSprite: {fileID: 0}
+    size100Sprite: {fileID: 0}
+    size30Sprite: {fileID: 0}
+    size0Sprite: {fileID: 0}
+    size100SelectedSprite: {fileID: 0}
+    size30SelectedSprite: {fileID: 0}
+    size0SelectedSprite: {fileID: 0}
+    sizePopupSprite: {fileID: 0}
+  - displayName: Jump_big
+    isEnabled: 1
+    dragSource: {fileID: 273771405}
+    additionalDragSources: []
+    worldTemplate: {fileID: 0}
+    footprint: {x: 6, y: 3}
+    placementOffset: {x: 0, y: 0, z: 0}
+    availableCount: 1
+    hideSourceWhenExhausted: 1
+    sourceVisualRoot: {fileID: 273771404}
+    isBgmScrollBar: 0
+    isBrightnessScrollBar: 0
+    isRandomStepBlock: 0
+    isUpwardDropdownBlock: 0
+    isPopupBlock: 0
+    isPauseBlock: 0
+    isRetryBlock: 0
+    isSaveBlock: 0
+    isBigUiBlock: 1
+    isUiSizeBlock: 0
+    usesDynamicCollider: 1
+    moveSpeed: 5
+    jumpPower: 15
+    bgmTrackSource: {fileID: 0}
+    bgmHandleSource: {fileID: 0}
+    brightnessIconSprite: {fileID: 0}
+    brightnessScrollBarSprite: {fileID: 0}
+    pausePlaySprite: {fileID: 0}
+    saveLoadSprite: {fileID: 0}
+    compactUiSprite: {fileID: 7460046300004610927, guid: 05d3d961359ee4548a3620641e5b9cce, type: 3}
+    compactAlternateUiSprite: {fileID: 0}
+    size100Sprite: {fileID: 0}
+    size30Sprite: {fileID: 0}
+    size0Sprite: {fileID: 0}
+    size100SelectedSprite: {fileID: 0}
+    size30SelectedSprite: {fileID: 0}
+    size0SelectedSprite: {fileID: 0}
+    sizePopupSprite: {fileID: 0}
+  - displayName: MoveL_big
+    isEnabled: 1
+    dragSource: {fileID: 1389263275}
+    additionalDragSources: []
+    worldTemplate: {fileID: 0}
+    footprint: {x: 3, y: 3}
+    placementOffset: {x: 0, y: 0, z: 0}
+    availableCount: 1
+    hideSourceWhenExhausted: 1
+    sourceVisualRoot: {fileID: 1389263274}
+    isBgmScrollBar: 0
+    isBrightnessScrollBar: 0
+    isRandomStepBlock: 0
+    isUpwardDropdownBlock: 0
+    isPopupBlock: 0
+    isPauseBlock: 0
+    isRetryBlock: 0
+    isSaveBlock: 0
+    isBigUiBlock: 1
+    isUiSizeBlock: 0
+    usesDynamicCollider: 1
+    moveSpeed: 5
+    jumpPower: 15
+    bgmTrackSource: {fileID: 0}
+    bgmHandleSource: {fileID: 0}
+    brightnessIconSprite: {fileID: 0}
+    brightnessScrollBarSprite: {fileID: 0}
+    pausePlaySprite: {fileID: 0}
+    saveLoadSprite: {fileID: 0}
+    compactUiSprite: {fileID: -6361603654429376631, guid: 3e3b784318267ce4a9a2420812df2e76, type: 3}
+    compactAlternateUiSprite: {fileID: 0}
+    size100Sprite: {fileID: 0}
+    size30Sprite: {fileID: 0}
+    size0Sprite: {fileID: 0}
+    size100SelectedSprite: {fileID: 0}
+    size30SelectedSprite: {fileID: 0}
+    size0SelectedSprite: {fileID: 0}
+    sizePopupSprite: {fileID: 0}
+  - displayName: Size
+    isEnabled: 1
+    dragSource: {fileID: 1127072763}
+    additionalDragSources: []
+    worldTemplate: {fileID: 0}
+    footprint: {x: 2, y: 3}
+    placementOffset: {x: 0, y: -1, z: 0}
+    availableCount: 1
+    hideSourceWhenExhausted: 1
+    sourceVisualRoot: {fileID: 1127072762}
+    isBgmScrollBar: 0
+    isBrightnessScrollBar: 0
+    isRandomStepBlock: 0
+    isUpwardDropdownBlock: 0
+    isPopupBlock: 0
+    isPauseBlock: 0
+    isRetryBlock: 0
+    isSaveBlock: 0
+    isBigUiBlock: 0
+    isUiSizeBlock: 1
+    usesDynamicCollider: 1
+    moveSpeed: 5
+    jumpPower: 15
+    bgmTrackSource: {fileID: 0}
+    bgmHandleSource: {fileID: 0}
+    brightnessIconSprite: {fileID: 0}
+    brightnessScrollBarSprite: {fileID: 0}
+    pausePlaySprite: {fileID: 0}
+    saveLoadSprite: {fileID: 0}
+    compactUiSprite: {fileID: 0}
+    compactAlternateUiSprite: {fileID: 0}
+    size100Sprite: {fileID: -4084831112047481090, guid: 71a3682fbe1d8f04cadcee0014432bf8, type: 3}
+    size30Sprite: {fileID: -6703690909230607987, guid: 7fbb332704335054ab1f60c9416945ee, type: 3}
+    size0Sprite: {fileID: 9090040397212968234, guid: a5a59aff21f6f7e42a0bd2ebca4b7a9b, type: 3}
+    size100SelectedSprite: {fileID: 3595725306915661376, guid: 7453df75ce69e3e42b1060a7bc5df5b6, type: 3}
+    size30SelectedSprite: {fileID: -6217729815199449683, guid: c8b351ed75b67034ab68ec7dd4ebc6f9, type: 3}
+    size0SelectedSprite: {fileID: -7768202356628772295, guid: d5058a58187c63b46b9be5d9c17fb521, type: 3}
+    sizePopupSprite: {fileID: 15013002, guid: 1d41e68413bb3fc4e842e4b79bb232eb, type: 3}
   blockAvailabilityVersion: 1
   bgmTrackRightOpacity: 0.4
   bgmTrackColor: {r: 0.4392157, g: 0.4392157, b: 0.4392157, a: 1}
@@ -7926,7 +8483,7 @@ MonoBehaviour:
   blockPlacementVolume: 1
   blockPickupClip: {fileID: 8300000, guid: 0e9c36e55dc986e419076859c35c3920, type: 3}
   blockPickupVolume: 1
-  invalidPlacementClip: {fileID: 8300000, guid: 643e592fe6868f54dafcc6102394ac5c, type: 3}
+  invalidPlacementClip: {fileID: 8300000, guid: 8a3a6910c9759754dbb043dafaed8291, type: 3}
   invalidPlacementVolume: 1
   blockHoverClip: {fileID: 8300000, guid: 0f3a9226c16d96e46aa3380149d89bc0, type: 3}
   blockHoverVolume: 1
@@ -8591,6 +9148,10 @@ RectTransform:
   - {fileID: 2201000102}
   - {fileID: 2201000202}
   - {fileID: 2401000102}
+  - {fileID: 301135292}
+  - {fileID: 273771405}
+  - {fileID: 1389263275}
+  - {fileID: 1127072763}
   m_Father: {fileID: 457092461}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
@@ -8834,10 +9395,74 @@ MonoBehaviour:
   m_hasFontAssetChanged: 0
   m_baseMaterial: {fileID: 0}
   m_maskOffset: {x: 0, y: 0, z: 0, w: 0}
+--- !u!1 &910001001
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 910001002}
+  - component: {fileID: 910001003}
+  m_Layer: 0
+  m_Name: BGManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &910001002
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 910001001}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0.5, y: 0.5}
+  m_AnchorMax: {x: 0.5, y: 0.5}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 2000, y: 1100}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &910001003
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 910001001}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7ea8dbe8780598a4a895b52af52cba62, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BGManager
+  targetCamera: {fileID: 0}
+  animationArea: {fileID: 910001002}
+  referenceCanvasHeight: 1080
+  sortingLayerName: Default
+  sortingOrder: -10
+  distanceFromCamera: 10
+  initialSquareCount: 8
+  maxSquareCount: 20
+  spawnIntervalRange: {x: 1, y: 2}
+  squareSizeRange: {x: 100, y: 200}
+  moveSpeedRange: {x: 25, y: 80}
+  verticalMargin: 20
+  useUnscaledTime: 0
+  squareColor: {r: 0.9622642, g: 0.9622642, b: 0.9622642, a: 1}
+  rotationRange: {x: 0, y: 0}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
   m_Roots:
+  - {fileID: 910001002}
   - {fileID: 2100000701}
   - {fileID: 726185810}
   - {fileID: 335955563}

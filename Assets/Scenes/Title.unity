@@ -488,8 +488,8 @@ MonoBehaviour:
       m_Calls: []
   m_text: GAME START
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: b745ea105f221bb45a50e1ab7d16153b, type: 2}
-  m_sharedMaterial: {fileID: -4259499787218161454, guid: b745ea105f221bb45a50e1ab7d16153b, type: 2}
+  m_fontAsset: {fileID: 11400000, guid: cf623d5b840d931468d60696bf8ba4e0, type: 2}
+  m_sharedMaterial: {fileID: 4192910169644246139, guid: cf623d5b840d931468d60696bf8ba4e0, type: 2}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []
@@ -1385,7 +1385,7 @@ MonoBehaviour:
   blockPlacementVolume: 1
   blockPickupClip: {fileID: 8300000, guid: 0e9c36e55dc986e419076859c35c3920, type: 3}
   blockPickupVolume: 1
-  invalidPlacementClip: {fileID: 8300000, guid: 643e592fe6868f54dafcc6102394ac5c, type: 3}
+  invalidPlacementClip: {fileID: 8300000, guid: 8a3a6910c9759754dbb043dafaed8291, type: 3}
   invalidPlacementVolume: 1
   blockHoverClip: {fileID: 8300000, guid: 0f3a9226c16d96e46aa3380149d89bc0, type: 3}
   blockHoverVolume: 1
@@ -1420,10 +1420,74 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BgmVolumeBar
   scrollbar: {fileID: 756177917}
+--- !u!1 &910001161
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 910001162}
+  - component: {fileID: 910001163}
+  m_Layer: 0
+  m_Name: BGManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &910001162
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 910001161}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0.5, y: 0.5}
+  m_AnchorMax: {x: 0.5, y: 0.5}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 2000, y: 1100}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &910001163
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 910001161}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7ea8dbe8780598a4a895b52af52cba62, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BGManager
+  targetCamera: {fileID: 0}
+  animationArea: {fileID: 910001162}
+  referenceCanvasHeight: 1080
+  sortingLayerName: Default
+  sortingOrder: -10
+  distanceFromCamera: 10
+  initialSquareCount: 8
+  maxSquareCount: 20
+  spawnIntervalRange: {x: 1, y: 2}
+  squareSizeRange: {x: 100, y: 200}
+  moveSpeedRange: {x: 25, y: 80}
+  verticalMargin: 20
+  useUnscaledTime: 0
+  squareColor: {r: 0.9622642, g: 0.9622642, b: 0.9622642, a: 1}
+  rotationRange: {x: 0, y: 0}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
   m_Roots:
+  - {fileID: 910001162}
   - {fileID: 2100000701}
   - {fileID: 519420032}
   - {fileID: 1910449553}

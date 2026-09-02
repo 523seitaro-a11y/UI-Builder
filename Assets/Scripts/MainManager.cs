@@ -1,6 +1,7 @@
 using DG.Tweening;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.UI;
 
 public class MainManager : MonoBehaviour
 {
@@ -24,17 +25,15 @@ public class MainManager : MonoBehaviour
     [Tooltip("長押しが進み、円形変化が完了した部分の色です。")]
     [SerializeField] private Color retryAfterColor = Color.white;
 
-    [Tooltip("画面座標をワールド座標へ変換するカメラです。未設定ならMain Cameraを使用します。")]
+    [Tooltip("表示サイズとオフセットの換算に使用するカメラです。未設定ならMain Cameraを使用します。")]
     [SerializeField] private Camera pointerCamera;
 
-    [Tooltip("カーソル位置からRetry表示へ加えるワールド座標の補正です。")]
+    [Tooltip("カーソル位置からRetry表示へ加える補正です。従来どおりワールド単位で指定します。")]
     [SerializeField] private Vector2 retryCursorOffset;
-
-    [Tooltip("Retry表示のワールド座標上のZ値です。")]
-    [SerializeField] private float retryCursorZ = -5f;
 
     [SerializeField] private Vector3 retryCursorScale = Vector3.one;
     [SerializeField] private string retryCursorSortingLayer = "Default";
+    [Tooltip("専用Overlay Canvasの描画順です。既存UIより大きい値にしてください。")]
     [SerializeField] private int retryCursorSortingOrder = 100;
 
     [Header("長押しアニメーション")]
@@ -66,7 +65,8 @@ public class MainManager : MonoBehaviour
     private static readonly int BeforeColorId = Shader.PropertyToID("_BeforeColor");
     private static readonly int AfterColorId = Shader.PropertyToID("_AfterColor");
 
-    private SpriteRenderer retryCursorRenderer;
+    private Image retryCursorImage;
+    private RectTransform retryCursorRect;
     private Material retryCursorMaterial;
     private Tween retryHoldTween;
     private Tween retryScaleTween;
@@ -158,21 +158,21 @@ public class MainManager : MonoBehaviour
         UpdateRetryCursorPosition(screenPosition);
         SetRetryFillProgress(0f);
 
-        if (retryCursorRenderer != null)
+        if (retryCursorImage != null)
         {
             retryScaleTween?.Kill();
             retryScaleTween = null;
             isRetryCursorHiding = false;
-            retryCursorRenderer.transform.localScale = Vector3.zero;
-            retryCursorRenderer.gameObject.SetActive(true);
+            retryCursorRect.localScale = Vector3.zero;
+            retryCursorImage.gameObject.SetActive(true);
 
             if (retryScaleInDuration <= 0f)
             {
-                retryCursorRenderer.transform.localScale = retryCursorScale;
+                retryCursorRect.localScale = retryCursorScale;
             }
             else
             {
-                retryScaleTween = retryCursorRenderer.transform
+                retryScaleTween = retryCursorRect
                     .DOScale(retryCursorScale, retryScaleInDuration)
                     .SetEase(retryScaleInEase)
                     .SetUpdate(true)
@@ -221,14 +221,14 @@ public class MainManager : MonoBehaviour
 
     private void HideRetryCursorQuickly()
     {
-        if (retryCursorRenderer == null)
+        if (retryCursorImage == null)
         {
             return;
         }
 
-        if (!retryCursorRenderer.gameObject.activeSelf)
+        if (!retryCursorImage.gameObject.activeSelf)
         {
-            retryCursorRenderer.transform.localScale = Vector3.zero;
+            retryCursorRect.localScale = Vector3.zero;
             return;
         }
 
@@ -247,7 +247,7 @@ public class MainManager : MonoBehaviour
             return;
         }
 
-        retryScaleTween = retryCursorRenderer.transform
+        retryScaleTween = retryCursorRect
             .DOScale(Vector3.zero, retryScaleOutDuration)
             .SetEase(retryScaleOutEase)
             .SetUpdate(true)
@@ -259,10 +259,10 @@ public class MainManager : MonoBehaviour
         retryScaleTween = null;
         isRetryCursorHiding = false;
 
-        if (retryCursorRenderer != null)
+        if (retryCursorImage != null)
         {
-            retryCursorRenderer.transform.localScale = Vector3.zero;
-            retryCursorRenderer.gameObject.SetActive(false);
+            retryCursorRect.localScale = Vector3.zero;
+            retryCursorImage.gameObject.SetActive(false);
         }
     }
 
@@ -285,15 +285,36 @@ public class MainManager : MonoBehaviour
             return;
         }
 
-        GameObject retryCursor = new GameObject("Retry Cursor");
-        retryCursor.transform.SetParent(transform);
-        retryCursor.transform.localScale = Vector3.zero;
+        GameObject canvasObject = new GameObject(
+            "Retry Cursor Canvas",
+            typeof(RectTransform),
+            typeof(Canvas));
+        canvasObject.transform.SetParent(transform, false);
 
-        retryCursorRenderer = retryCursor.AddComponent<SpriteRenderer>();
-        retryCursorRenderer.sprite = retryCursorSprite;
-        retryCursorRenderer.color = Color.white;
-        retryCursorRenderer.sortingLayerName = retryCursorSortingLayer;
-        retryCursorRenderer.sortingOrder = retryCursorSortingOrder;
+        Canvas retryCanvas = canvasObject.GetComponent<Canvas>();
+        retryCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        retryCanvas.overrideSorting = true;
+        retryCanvas.sortingLayerName = retryCursorSortingLayer;
+        retryCanvas.sortingOrder = retryCursorSortingOrder;
+
+        GameObject retryCursor = new GameObject(
+            "Retry Cursor",
+            typeof(RectTransform),
+            typeof(CanvasRenderer),
+            typeof(Image));
+        retryCursorRect = retryCursor.GetComponent<RectTransform>();
+        retryCursorRect.SetParent(canvasObject.transform, false);
+        retryCursorRect.anchorMin = Vector2.zero;
+        retryCursorRect.anchorMax = Vector2.zero;
+        retryCursorRect.pivot = new Vector2(0.5f, 0.5f);
+        retryCursorRect.sizeDelta = GetRetryCursorPixelSize();
+        retryCursorRect.localScale = Vector3.zero;
+
+        retryCursorImage = retryCursor.GetComponent<Image>();
+        retryCursorImage.sprite = retryCursorSprite;
+        retryCursorImage.color = Color.white;
+        retryCursorImage.preserveAspect = true;
+        retryCursorImage.raycastTarget = false;
 
         if (retryRevealShader != null)
         {
@@ -306,11 +327,11 @@ public class MainManager : MonoBehaviour
             retryCursorMaterial.SetColor(BeforeColorId, retryBeforeColor);
             retryCursorMaterial.SetColor(AfterColorId, retryAfterColor);
             SetSpriteUvRect(retryCursorSprite);
-            retryCursorRenderer.sharedMaterial = retryCursorMaterial;
+            retryCursorImage.material = retryCursorMaterial;
         }
         else
         {
-            retryCursorRenderer.color = retryBeforeColor;
+            retryCursorImage.color = retryBeforeColor;
         }
 
         retryCursor.SetActive(false);
@@ -341,18 +362,13 @@ public class MainManager : MonoBehaviour
 
     private void UpdateRetryCursorPosition(Vector2 screenPosition)
     {
-        if (retryCursorRenderer == null || pointerCamera == null)
+        if (retryCursorRect == null)
         {
             return;
         }
 
-        float depth = Mathf.Abs(pointerCamera.transform.position.z - retryCursorZ);
-        Vector3 position = pointerCamera.ScreenToWorldPoint(
-            new Vector3(screenPosition.x, screenPosition.y, depth));
-        position.x += retryCursorOffset.x;
-        position.y += retryCursorOffset.y;
-        position.z = retryCursorZ;
-        retryCursorRenderer.transform.position = position;
+        float pixelsPerWorldUnit = GetPixelsPerWorldUnit();
+        retryCursorRect.anchoredPosition = screenPosition + retryCursorOffset * pixelsPerWorldUnit;
     }
 
     private void OnValidate()
@@ -368,9 +384,9 @@ public class MainManager : MonoBehaviour
             retryCursorMaterial.SetColor(BeforeColorId, retryBeforeColor);
             retryCursorMaterial.SetColor(AfterColorId, retryAfterColor);
         }
-        else if (retryCursorRenderer != null)
+        else if (retryCursorImage != null)
         {
-            retryCursorRenderer.color = retryBeforeColor;
+            retryCursorImage.color = retryBeforeColor;
         }
 
         FindMissingReferences();
@@ -408,6 +424,24 @@ public class MainManager : MonoBehaviour
         {
             Destroy(retryCursorMaterial);
         }
+    }
+
+    private Vector2 GetRetryCursorPixelSize()
+    {
+        Vector2 worldSize = retryCursorSprite != null
+            ? retryCursorSprite.bounds.size
+            : Vector2.one;
+        return worldSize * GetPixelsPerWorldUnit();
+    }
+
+    private float GetPixelsPerWorldUnit()
+    {
+        if (pointerCamera == null || !pointerCamera.orthographic)
+        {
+            return 100f;
+        }
+
+        return pointerCamera.pixelHeight / (pointerCamera.orthographicSize * 2f);
     }
 
     private static bool TryGetPointerState(out Vector2 position, out PointerPhase phase)

@@ -14,6 +14,13 @@ public class BlockManager : MonoBehaviour
 {
     private const string UiForegroundSortingLayer = "UIForeground";
 
+    public enum BigUiSizeMode
+    {
+        Hidden,
+        Compact,
+        Full
+    }
+
     public interface IBlockOperationState
     {
         bool IsOperating { get; }
@@ -40,7 +47,31 @@ public class BlockManager : MonoBehaviour
     public float PlayModeHoverOutlineWidth => playModeHoverOutlineWidth;
     public bool IsBuildMode { get; private set; } = true;
     public bool IsPlayerCrushedByScrollBar { get; private set; }
+
+    public void ReportPlayerCrushedByMovingBlock()
+    {
+        IsPlayerCrushedByScrollBar = true;
+    }
     public bool IsPlayerStopped { get; private set; }
+    public bool HasPlayerMovementInput
+    {
+        get
+        {
+            foreach (PlacedBlock block in placedBlocks)
+            {
+                foreach (IBlockOperationState state in block.operationStates)
+                {
+                    if (state.IsOperating &&
+                        (state is MoveL || state is MoveR))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+    }
     public int PlacedBlockCount => placedBlocks.Count;
     public bool AllBlocksPlaced
     {
@@ -122,6 +153,12 @@ public class BlockManager : MonoBehaviour
         [Tooltip("プレイヤーの位置・慣性・表示を保存／復元する1×2ブロックとして扱います。")]
         public bool isSaveBlock;
 
+        [Tooltip("通常サイズへの置換・非表示化の対象となるBig UIブロックです。")]
+        public bool isBigUiBlock;
+
+        [Tooltip("Big UIの表示サイズを変更する1×2ブロックです。")]
+        public bool isUiSizeBlock;
+
         [Tooltip("TilemapへColliderを統合せず、ブロック自身の可変Colliderを使用します。")]
         public bool usesDynamicCollider;
 
@@ -148,6 +185,16 @@ public class BlockManager : MonoBehaviour
 
         [Tooltip("保存済みのセーブブロック表示に使用するLoadスプライトです。")]
         public Sprite saveLoadSprite;
+
+        public Sprite compactUiSprite;
+        public Sprite compactAlternateUiSprite;
+        public Sprite size100Sprite;
+        public Sprite size30Sprite;
+        public Sprite size0Sprite;
+        public Sprite size100SelectedSprite;
+        public Sprite size30SelectedSprite;
+        public Sprite size0SelectedSprite;
+        public Sprite sizePopupSprite;
 
         [NonSerialized] public int usedCount;
         [NonSerialized] public Vector3 sourceBaseScale;
@@ -183,6 +230,7 @@ public class BlockManager : MonoBehaviour
         public float bgmMaximumVolume;
         public bool isBgmVertical;
         public BrightnessVisibilityVisual brightnessVisibilityVisual;
+        public BigUiBlock bigUiBlock;
         public bool suppressNextBuildHoverSound;
     }
 
@@ -337,8 +385,8 @@ public class BlockManager : MonoBehaviour
     private Texture2D runtimeVariableBlockCircleTexture;
     private Sprite runtimeVariableBlockCircleSprite;
     private PlacedBlock activeBgmScrollBar;
+    private PlacedBlock playerAttachedBgmScrollBar;
     private PlacedBlock pressedPlayModeBlock;
-    private bool isPlayerAttachedToBgmHandle;
     private Vector2 playerBgmHandleOffset;
     private bool hasBgmScrollBarResetVolume;
     private float bgmScrollBarResetVolume;
@@ -346,6 +394,7 @@ public class BlockManager : MonoBehaviour
     private float playerStopOriginalGravityScale;
     private PhysicsMaterial2D playerStopOriginalMaterial;
     private PhysicsMaterial2D playerStopFrictionlessMaterial;
+    private BigUiSizeMode bigUiSizeMode = BigUiSizeMode.Full;
 
     private static readonly Vector2[] HoverOutlineDirections =
     {
@@ -646,6 +695,37 @@ public class BlockManager : MonoBehaviour
                 block.instance.transform.localScale,
                 target,
                 interpolation);
+            ApplyBuildModeHoverDepth(block, block == hovered);
+        }
+    }
+
+    private void ApplyBuildModeHoverDepth(PlacedBlock block, bool hovered)
+    {
+        if (block?.renderers == null || block.baseSortingOrders == null)
+        {
+            return;
+        }
+
+        int rendererCount = Mathf.Min(block.renderers.Length, block.baseSortingOrders.Length);
+        int minimumBaseOrder = int.MaxValue;
+        for (int i = 0; i < rendererCount; i++)
+        {
+            if (block.renderers[i] != null)
+            {
+                minimumBaseOrder = Mathf.Min(minimumBaseOrder, block.baseSortingOrders[i]);
+            }
+        }
+
+        int hoverOffset = minimumBaseOrder == int.MaxValue
+            ? 0
+            : Mathf.Max(draggedBlockSortingOrder + 1, placedSortingOrder + 1) - minimumBaseOrder;
+        for (int i = 0; i < rendererCount; i++)
+        {
+            SpriteRenderer renderer = block.renderers[i];
+            if (renderer != null)
+            {
+                renderer.sortingOrder = block.baseSortingOrders[i] + (hovered ? hoverOffset : 0);
+            }
         }
     }
 
@@ -775,6 +855,12 @@ public class BlockManager : MonoBehaviour
         activePreview = preview;
         activeGridPreview = CreateGridPreview(definition);
         activeGridPreview.name = $"{activePreview.name} (Grid Preview)";
+
+        if (definition.isUiSizeBlock)
+        {
+            SetSizeDragVisual(activePreview, definition.sizePopupSprite, true);
+            SetSizeDragVisual(activeGridPreview, definition.sizePopupSprite, true);
+        }
 
         if (IsScrollBar(definition))
         {
@@ -1052,8 +1138,14 @@ public class BlockManager : MonoBehaviour
         Vector3 worldPoint = ScreenToWorld(screenPosition);
 
         Vector2Int footprint = GetValidFootprint(activeDefinition);
+        Vector2Int dragAnchorFootprint = activeDefinition.isUiSizeBlock
+            ? new Vector2Int(2, 1)
+            : footprint;
         Vector3 footprintSelectionOffset =
-            (placementTilemap.CellToWorld(new Vector3Int(footprint.x - 1, footprint.y - 1, 0)) -
+            (placementTilemap.CellToWorld(new Vector3Int(
+                 dragAnchorFootprint.x - 1,
+                 dragAnchorFootprint.y - 1,
+                 0)) -
              placementTilemap.CellToWorld(Vector3Int.zero)) * 0.5f;
         activeCell = placementTilemap.WorldToCell(worldPoint - footprintSelectionOffset);
         PlayCursorSoundWhenCellChanges(activeCell);
@@ -1138,6 +1230,10 @@ public class BlockManager : MonoBehaviour
     {
         bool isNew = activePlacedBlock == null;
         activePreview.transform.position = GetSnappedPosition(activeDefinition, cell);
+        if (activeDefinition.isUiSizeBlock)
+        {
+            SetSizeDragVisual(activePreview, activeDefinition.sizePopupSprite, false);
+        }
         if (activeDefinition.isBrightnessScrollBar)
         {
             SetBrightnessDragVisual(activePreview, false);
@@ -1152,6 +1248,7 @@ public class BlockManager : MonoBehaviour
         block.cell = cell;
         block.isBgmVertical = IsScrollBar(activeDefinition) && activeDefinition.isBgmVertical;
         block.instance.transform.localScale = block.baseScale;
+        block.bigUiBlock?.ApplySizeMode(bigUiSizeMode);
         placedBlocks.Add(block);
         CreatePlayModeHoverOutlines(block);
 
@@ -1176,12 +1273,16 @@ public class BlockManager : MonoBehaviour
     public void SetBuildMode(bool isBuildMode)
     {
         SetPlayerStopped(false);
+        if (isBuildMode)
+        {
+            SetBigUiSizeMode(BigUiSizeMode.Full, true);
+        }
         bool isReturningToBuildMode = isBuildMode && !IsBuildMode;
         EndPlacedBlockOperation();
         StopBgmHandlePlayerMotion();
         activeBgmScrollBar = null;
+        playerAttachedBgmScrollBar = null;
         pressedPlayModeBlock = null;
-        isPlayerAttachedToBgmHandle = false;
         IsPlayerCrushedByScrollBar = false;
         HideAllPlayModeHoverOutlines();
         IsBuildMode = isBuildMode;
@@ -1221,6 +1322,21 @@ public class BlockManager : MonoBehaviour
         }
     }
 
+    /// <summary>配置済みのセーブブロックの保存内容をすべて破棄します。</summary>
+    public void ResetSavedPlayerStates()
+    {
+        foreach (PlacedBlock block in placedBlocks)
+        {
+            foreach (IPlayModeBlockState state in block.playModeStates)
+            {
+                if (state is SaveBlock saveBlock && saveBlock != null)
+                {
+                    saveBlock.ResetSavedState();
+                }
+            }
+        }
+    }
+
     /// <summary>
     /// BGMScrollBarで変更した音量とハンドル位置を、配置時の状態へ戻します。
     /// </summary>
@@ -1229,7 +1345,7 @@ public class BlockManager : MonoBehaviour
         SetPlayerStopped(false);
         StopBgmHandlePlayerMotion();
         activeBgmScrollBar = null;
-        isPlayerAttachedToBgmHandle = false;
+        playerAttachedBgmScrollBar = null;
         IsPlayerCrushedByScrollBar = false;
 
         foreach (PlacedBlock block in placedBlocks)
@@ -1340,7 +1456,8 @@ public class BlockManager : MonoBehaviour
                 : 0,
             bgmNormalizedValue = 1f,
             bgmMaximumVolume = activeDefinition.bgmMaximumVolume,
-            isBgmVertical = IsScrollBar(activeDefinition) && activeDefinition.isBgmVertical
+            isBgmVertical = IsScrollBar(activeDefinition) && activeDefinition.isBgmVertical,
+            bigUiBlock = activePreview.GetComponent<BigUiBlock>()
         };
     }
 
@@ -1354,7 +1471,8 @@ public class BlockManager : MonoBehaviour
         if (phase == PointerPhase.Began)
         {
             activeBgmScrollBar = FindBgmScrollBarHandle(screenPosition);
-            isPlayerAttachedToBgmHandle = TryAttachPlayerToBgmHandle(activeBgmScrollBar);
+            playerAttachedBgmScrollBar = FindPlayerSupportingSynchronizedScrollBar(
+                activeBgmScrollBar);
         }
 
         if (activeBgmScrollBar != null && phase != PointerPhase.Ended)
@@ -1366,7 +1484,7 @@ public class BlockManager : MonoBehaviour
         {
             StopBgmHandlePlayerMotion();
             activeBgmScrollBar = null;
-            isPlayerAttachedToBgmHandle = false;
+            playerAttachedBgmScrollBar = null;
         }
     }
 
@@ -1417,9 +1535,9 @@ public class BlockManager : MonoBehaviour
             minimum,
             maximum);
 
-        if (!isPlayerAttachedToBgmHandle)
+        if (playerAttachedBgmScrollBar == null)
         {
-            isPlayerAttachedToBgmHandle = TryAttachPlayerToBgmHandle(block);
+            playerAttachedBgmScrollBar = FindPlayerSupportingSynchronizedScrollBar(block);
         }
 
         float normalizedValue = travel <= Mathf.Epsilon
@@ -1436,7 +1554,7 @@ public class BlockManager : MonoBehaviour
             SetScrollBarHandleNormalized(
                 placedBlock,
                 normalizedValue,
-                placedBlock == block && isPlayerAttachedToBgmHandle);
+                placedBlock == playerAttachedBgmScrollBar);
         }
 
         if (block.definition.isBrightnessScrollBar)
@@ -1450,11 +1568,101 @@ public class BlockManager : MonoBehaviour
         }
     }
 
+    public bool SetBigUiSizeMode(BigUiSizeMode mode, bool force = false)
+    {
+        if (!force && IsBigUiExpansion(bigUiSizeMode, mode))
+        {
+            if (playerCollider == null)
+            {
+                FindPlayerPhysicsReferences();
+            }
+
+            List<BigUiBlock> blockedBlocks = new List<BigUiBlock>();
+            if (playerCollider != null && playerCollider.enabled)
+            {
+                Physics2D.SyncTransforms();
+                foreach (PlacedBlock block in placedBlocks)
+                {
+                    if (block.bigUiBlock != null &&
+                        block.bigUiBlock.WouldOverlap(playerCollider, mode))
+                    {
+                        blockedBlocks.Add(block.bigUiBlock);
+                    }
+                }
+            }
+
+            if (blockedBlocks.Count > 0)
+            {
+                foreach (BigUiBlock blockedBlock in blockedBlocks)
+                {
+                    blockedBlock.ShowInvalidSizePreview(mode, invalidPreviewColor, 0.3f);
+                }
+
+                AudioManager.Instance?.PlayInvalidPlacementSound();
+                return false;
+            }
+        }
+
+        bigUiSizeMode = mode;
+        foreach (PlacedBlock block in placedBlocks)
+        {
+            block.bigUiBlock?.ApplySizeMode(mode);
+            foreach (IBlockOperationState state in block.operationStates)
+            {
+                if (state is UiSizeBlock sizeBlock)
+                {
+                    sizeBlock.SetSelectedMode(mode);
+                }
+            }
+        }
+
+        return true;
+    }
+
+    private static bool IsBigUiExpansion(BigUiSizeMode current, BigUiSizeMode target) =>
+        GetBigUiSizeRank(target) > GetBigUiSizeRank(current);
+
+    private static int GetBigUiSizeRank(BigUiSizeMode mode) => mode switch
+    {
+        BigUiSizeMode.Hidden => 0,
+        BigUiSizeMode.Compact => 1,
+        _ => 2
+    };
+
     private static bool IsSameScrollBarType(PlacedBlock source, PlacedBlock candidate) =>
         source != null &&
         candidate != null &&
         IsScrollBar(candidate.definition) &&
         source.definition.isBrightnessScrollBar == candidate.definition.isBrightnessScrollBar;
+
+    private PlacedBlock FindPlayerSupportingSynchronizedScrollBar(PlacedBlock source)
+    {
+        if (source == null)
+        {
+            return null;
+        }
+
+        // Prefer the dragged handle when the player is standing on it.
+        if (TryAttachPlayerToBgmHandle(source))
+        {
+            return source;
+        }
+
+        // Handles of the same type move together. The player must therefore be carried by
+        // whichever synchronized handle they are actually standing on, even when another
+        // handle is being dragged.
+        foreach (PlacedBlock candidate in placedBlocks)
+        {
+            if (candidate != source &&
+                IsSameScrollBarType(source, candidate) &&
+                TryAttachPlayerToBgmHandle(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
 
     private void SetScrollBarHandleNormalized(
         PlacedBlock block,
@@ -1493,16 +1701,14 @@ public class BlockManager : MonoBehaviour
         }
 
         Vector2 handleMovement = handlePosition - previousHandlePosition;
-        DetectScrollBarCrush(block, handleMovement, carryAttachedPlayer);
+        DetectScrollBarCrush(block, handleMovement);
         block.bgmHandle.position = handlePosition;
         block.bgmNormalizedValue = Mathf.Clamp01(normalizedValue);
         ApplyBgmTrackVisual(block, false);
 
         if (carryAttachedPlayer && playerBody != null)
         {
-            playerBody.position = (Vector2)block.bgmHandle.position + playerBgmHandleOffset;
-            playerBody.WakeUp();
-            playerBody.linearVelocity = Vector2.zero;
+            CarryPlayerWithScrollBar(block);
         }
     }
 
@@ -1541,7 +1747,7 @@ public class BlockManager : MonoBehaviour
 
     private void StopBgmHandlePlayerMotion()
     {
-        if (!isPlayerAttachedToBgmHandle || playerBody == null)
+        if (playerAttachedBgmScrollBar == null || playerBody == null)
         {
             return;
         }
@@ -1603,7 +1809,7 @@ public class BlockManager : MonoBehaviour
 
             StopBgmHandlePlayerMotion();
             activeBgmScrollBar = null;
-            isPlayerAttachedToBgmHandle = false;
+            playerAttachedBgmScrollBar = null;
             playerBody.gravityScale = 0f;
             playerBody.linearVelocity = Vector2.zero;
             playerBody.angularVelocity = 0f;
@@ -2125,9 +2331,22 @@ public class BlockManager : MonoBehaviour
             SpriteRenderer source = block.renderers[i];
             if (IsHoverOutlineSource(block, source))
             {
-                source.sortingOrder = visible
-                    ? playModeHoverOutlineSortingOrder + 1
-                    : block.baseSortingOrders[i];
+                bool showSourceOutline =
+                    ShouldShowPlayModeHoverOutlineForSource(block, source, visible);
+                if (block.definition != null && block.definition.isUiSizeBlock)
+                {
+                    bool isOption = IsUiSizeOptionRenderer(source);
+                    source.sortingOrder = playModeHoverOutlineSortingOrder +
+                                          (isOption
+                                              ? showSourceOutline ? 2 : 1
+                                              : showSourceOutline ? 4 : 3);
+                }
+                else
+                {
+                    source.sortingOrder = showSourceOutline
+                        ? playModeHoverOutlineSortingOrder + 1
+                        : block.baseSortingOrders[i];
+                }
             }
         }
 
@@ -2146,6 +2365,16 @@ public class BlockManager : MonoBehaviour
 
             if (visible)
             {
+                // Big UI blocks can swap to their normal-sized sprite at runtime.
+                // Keep the hover outline identical to the renderer it surrounds.
+                outline.sprite = source.sprite;
+                outline.flipX = source.flipX;
+                outline.flipY = source.flipY;
+                outline.drawMode = source.drawMode;
+                outline.size = source.size;
+                outline.maskInteraction = source.maskInteraction;
+                outline.sortingLayerID = source.sortingLayerID;
+
                 Transform outlineTransform = outline.transform;
                 Transform sourceTransform = source.transform;
                 Vector2 offset =
@@ -2157,10 +2386,41 @@ public class BlockManager : MonoBehaviour
             }
 
             outline.gameObject.SetActive(
-                visible &&
-                source.enabled &&
-                source.gameObject.activeInHierarchy);
+                ShouldShowPlayModeHoverOutlineForSource(block, source, visible));
         }
+    }
+
+    private bool ShouldShowPlayModeHoverOutlineForSource(
+        PlacedBlock block,
+        SpriteRenderer source,
+        bool blockVisible)
+    {
+        if (!blockVisible || source == null || !source.enabled ||
+            !source.gameObject.activeInHierarchy)
+        {
+            return false;
+        }
+
+        if (block?.definition == null || !block.definition.isUiSizeBlock)
+        {
+            return true;
+        }
+
+        foreach (IBlockOperationState state in block.operationStates)
+        {
+            if (state is UiSizeBlock sizeBlock && sizeBlock.IsSelectedRenderer(source))
+            {
+                return false;
+            }
+        }
+
+        Vector2 screenPosition = Input.touchCount > 0
+            ? Input.GetTouch(0).position
+            : (Vector2)Input.mousePosition;
+        Vector3 pointerWorld = ScreenToWorld(screenPosition);
+        Bounds bounds = source.bounds;
+        return pointerWorld.x >= bounds.min.x && pointerWorld.x <= bounds.max.x &&
+               pointerWorld.y >= bounds.min.y && pointerWorld.y <= bounds.max.y;
     }
 
     private static bool IsHoverOutlineSource(PlacedBlock block, SpriteRenderer source)
@@ -2177,6 +2437,18 @@ public class BlockManager : MonoBehaviour
 
         return !IsScrollBar(block.definition) ||
                (block.bgmHandle != null && source.transform.IsChildOf(block.bgmHandle));
+    }
+
+    private static bool IsUiSizeOptionRenderer(SpriteRenderer source) =>
+        source != null && source.name.StartsWith("SizeOption", StringComparison.Ordinal);
+
+    private static void SetSizeDragVisual(GameObject target, Sprite popupSprite, bool dragging)
+    {
+        UiSizeBlock sizeBlock = target != null ? target.GetComponent<UiSizeBlock>() : null;
+        if (sizeBlock != null)
+        {
+            sizeBlock.SetDragPreview(dragging, popupSprite);
+        }
     }
 
     private void HideAllPlayModeHoverOutlines()
@@ -2513,8 +2785,7 @@ public class BlockManager : MonoBehaviour
 
     private void DetectScrollBarCrush(
         PlacedBlock block,
-        Vector2 handleMovement,
-        bool isPlayerAttachedToThisHandle)
+        Vector2 handleMovement)
     {
         if (IsPlayerCrushedByScrollBar ||
             block == null || block.bgmHandleCollider == null ||
@@ -2527,97 +2798,137 @@ public class BlockManager : MonoBehaviour
         Physics2D.SyncTransforms();
         Vector2 direction = handleMovement.normalized;
         float movementDistance = handleMovement.magnitude;
-        const float crushTolerance = 0.03f;
+        Bounds handleBounds = block.bgmHandleCollider.bounds;
+        Bounds playerBounds = playerCollider.bounds;
 
-        if (isPlayerAttachedToThisHandle)
-        {
-            IsPlayerCrushedByScrollBar = HasBlockingColliderInDirection(
-                playerCollider,
-                direction,
-                movementDistance + crushTolerance,
-                block.bgmHandleCollider);
-            return;
-        }
-
-        if (!TryGetPlayerHitDistance(
-                block.bgmHandleCollider,
-                direction,
-                movementDistance,
-                out float playerHitDistance))
+        // The handle must be behind the player and overlap the player's interior on the
+        // perpendicular axis. A horizontal handle supporting the player only touches its
+        // underside, so moving it toward a wall must not be treated as a crush.
+        bool isStandingOnHorizontalHandle =
+            Mathf.Abs(direction.x) >= Mathf.Abs(direction.y) &&
+            playerBounds.center.y >= handleBounds.max.y;
+        if (isStandingOnHorizontalHandle ||
+            Vector2.Dot((Vector2)playerBounds.center - (Vector2)handleBounds.center, direction) <= 0f ||
+            GetPerpendicularOverlap(handleBounds, playerBounds, direction) <= 0.01f)
         {
             return;
         }
 
-        float pushedDistance = movementDistance - playerHitDistance;
-        if (pushedDistance <= 0f)
+        Bounds movedHandleBounds = handleBounds;
+        movedHandleBounds.center += (Vector3)handleMovement;
+        float movedHandleLeadingFace = GetLeadingFace(movedHandleBounds, direction);
+        float playerTrailingFace = GetTrailingFace(playerBounds, direction);
+        if (!HasPassedFace(movedHandleLeadingFace, playerTrailingFace, direction))
         {
             return;
         }
 
-        IsPlayerCrushedByScrollBar = HasBlockingColliderInDirection(
-            playerCollider,
+        ContactFilter2D filter = CreateSolidContactFilter(playerCollider);
+        int hitCount = playerCollider.Cast(
             direction,
-            pushedDistance + crushTolerance,
-            block.bgmHandleCollider);
-    }
-
-    private bool TryGetPlayerHitDistance(
-        Collider2D movingCollider,
-        Vector2 direction,
-        float distance,
-        out float hitDistance)
-    {
-        hitDistance = 0f;
-        ContactFilter2D filter = CreateSolidContactFilter(movingCollider);
-        int hitCount = movingCollider.Cast(direction, filter, scrollBarCrushHits, distance);
-        float closestDistance = float.PositiveInfinity;
+            filter,
+            scrollBarCrushHits,
+            movementDistance + 0.001f);
+        float playerLeadingFace = GetLeadingFace(playerBounds, direction);
+        float playerSize = GetAxisSize(playerBounds, direction);
 
         for (int i = 0; i < hitCount; i++)
         {
             RaycastHit2D hit = scrollBarCrushHits[i];
-            if (hit.collider != playerCollider || hit.distance >= closestDistance)
+            if (!IsBlockingHit(hit, direction, playerCollider, block.bgmHandleCollider))
             {
                 continue;
             }
 
-            closestDistance = hit.distance;
+            float blockingFace = playerLeadingFace + GetAxisSign(direction) * hit.distance;
+            float availableSpace =
+                (blockingFace - movedHandleLeadingFace) * GetAxisSign(direction);
+            if (availableSpace < playerSize - 0.001f)
+            {
+                IsPlayerCrushedByScrollBar = true;
+                return;
+            }
         }
-
-        if (float.IsPositiveInfinity(closestDistance))
-        {
-            return false;
-        }
-
-        hitDistance = closestDistance;
-        return true;
     }
 
-    private bool HasBlockingColliderInDirection(
-        Collider2D collider,
+    private void CarryPlayerWithScrollBar(PlacedBlock block)
+    {
+        Vector2 targetPosition = (Vector2)block.bgmHandle.position + playerBgmHandleOffset;
+        Vector2 movement = targetPosition - playerBody.position;
+        float movementDistance = movement.magnitude;
+
+        if (movementDistance > 0.000001f)
+        {
+            Vector2 direction = movement / movementDistance;
+            ContactFilter2D filter = CreateSolidContactFilter(playerCollider);
+            int hitCount = playerCollider.Cast(
+                direction,
+                filter,
+                scrollBarCrushHits,
+                movementDistance);
+            float allowedDistance = movementDistance;
+
+            for (int i = 0; i < hitCount; i++)
+            {
+                RaycastHit2D hit = scrollBarCrushHits[i];
+                if (!IsBlockingHit(hit, direction, playerCollider, block.bgmHandleCollider))
+                {
+                    continue;
+                }
+
+                allowedDistance = Mathf.Min(allowedDistance, Mathf.Max(0f, hit.distance));
+            }
+
+            playerBody.position += direction * allowedDistance;
+        }
+
+        // When a wall blocks the carried player, retain the wall-limited position and let
+        // the handle slide underneath by updating the attachment offset.
+        playerBgmHandleOffset = playerBody.position - (Vector2)block.bgmHandle.position;
+        playerBody.WakeUp();
+        playerBody.linearVelocity = Vector2.zero;
+    }
+
+    private static bool IsBlockingHit(
+        RaycastHit2D hit,
         Vector2 direction,
-        float distance,
+        Collider2D sourceCollider,
         Collider2D ignoredCollider)
     {
-        ContactFilter2D filter = CreateSolidContactFilter(collider);
-        int hitCount = collider.Cast(direction, filter, scrollBarCrushHits, distance);
-
-        for (int i = 0; i < hitCount; i++)
-        {
-            Collider2D hitCollider = scrollBarCrushHits[i].collider;
-            if (hitCollider == null ||
-                hitCollider == collider ||
-                hitCollider == ignoredCollider ||
-                hitCollider.isTrigger ||
-                !hitCollider.enabled)
-            {
-                continue;
-            }
-
-            return true;
-        }
-
-        return false;
+        Collider2D hitCollider = hit.collider;
+        return hitCollider != null &&
+               hitCollider != sourceCollider &&
+               hitCollider != ignoredCollider &&
+               !hitCollider.isTrigger &&
+               hitCollider.enabled &&
+               Vector2.Dot(hit.normal, direction) < -0.5f;
     }
+
+    private static float GetPerpendicularOverlap(Bounds first, Bounds second, Vector2 direction) =>
+        Mathf.Abs(direction.x) >= Mathf.Abs(direction.y)
+            ? Mathf.Min(first.max.y, second.max.y) - Mathf.Max(first.min.y, second.min.y)
+            : Mathf.Min(first.max.x, second.max.x) - Mathf.Max(first.min.x, second.min.x);
+
+    private static float GetLeadingFace(Bounds bounds, Vector2 direction) =>
+        Mathf.Abs(direction.x) >= Mathf.Abs(direction.y)
+            ? direction.x >= 0f ? bounds.max.x : bounds.min.x
+            : direction.y >= 0f ? bounds.max.y : bounds.min.y;
+
+    private static float GetTrailingFace(Bounds bounds, Vector2 direction) =>
+        Mathf.Abs(direction.x) >= Mathf.Abs(direction.y)
+            ? direction.x >= 0f ? bounds.min.x : bounds.max.x
+            : direction.y >= 0f ? bounds.min.y : bounds.max.y;
+
+    private static float GetAxisSize(Bounds bounds, Vector2 direction) =>
+        Mathf.Abs(direction.x) >= Mathf.Abs(direction.y) ? bounds.size.x : bounds.size.y;
+
+    private static float GetAxisSign(Vector2 direction) =>
+        Mathf.Abs(direction.x) >= Mathf.Abs(direction.y)
+            ? Mathf.Sign(direction.x)
+            : Mathf.Sign(direction.y);
+
+    private static bool HasPassedFace(float leadingFace, float targetFace, Vector2 direction) =>
+        GetAxisSign(direction) > 0f ? leadingFace > targetFace : leadingFace < targetFace;
 
     private static bool IsPointerOverBlockSource(BlockDefinition definition, Vector2 screenPosition)
     {
@@ -2840,16 +3151,29 @@ public class BlockManager : MonoBehaviour
         string blockName = string.IsNullOrWhiteSpace(definition.displayName)
             ? definition.dragSource.name
             : definition.displayName;
-        bool isMoveRight = string.Equals(blockName, "MoveR", StringComparison.OrdinalIgnoreCase);
-        bool isMoveLeft = string.Equals(blockName, "MoveL", StringComparison.OrdinalIgnoreCase);
-        bool isJump = string.Equals(blockName, "Jump", StringComparison.OrdinalIgnoreCase);
+        bool isBigMoveRight = string.Equals(blockName, "MoveR_big", StringComparison.OrdinalIgnoreCase);
+        bool isBigMoveLeft = string.Equals(blockName, "MoveL_big", StringComparison.OrdinalIgnoreCase);
+        bool isBigJump = string.Equals(blockName, "Jump_big", StringComparison.OrdinalIgnoreCase);
+        bool isBigSave = string.Equals(blockName, "Save_big", StringComparison.OrdinalIgnoreCase);
+        bool isMoveRight = isBigMoveRight ||
+                           string.Equals(blockName, "MoveR", StringComparison.OrdinalIgnoreCase);
+        bool isMoveLeft = isBigMoveLeft ||
+                          string.Equals(blockName, "MoveL", StringComparison.OrdinalIgnoreCase);
+        bool isJump = isBigJump ||
+                      string.Equals(blockName, "Jump", StringComparison.OrdinalIgnoreCase);
+        bool isBigUi = definition.isBigUiBlock || isBigMoveRight || isBigMoveLeft ||
+                       isBigJump || isBigSave;
+        bool isUiSize = definition.isUiSizeBlock ||
+                        string.Equals(blockName, "Size", StringComparison.OrdinalIgnoreCase);
         bool isPause = definition.isPauseBlock ||
                        string.Equals(blockName, "Stop", StringComparison.OrdinalIgnoreCase);
         bool isRetry = definition.isRetryBlock ||
                        string.Equals(blockName, "RetryBlock", StringComparison.OrdinalIgnoreCase);
         bool isSave = definition.isSaveBlock ||
-                      string.Equals(blockName, "Save", StringComparison.OrdinalIgnoreCase);
-        if (!isMoveRight && !isMoveLeft && !isJump && !isPause && !isRetry && !isSave)
+                      string.Equals(blockName, "Save", StringComparison.OrdinalIgnoreCase) ||
+                      isBigSave;
+        if (!isMoveRight && !isMoveLeft && !isJump && !isUiSize &&
+            !isPause && !isRetry && !isSave)
         {
             return;
         }
@@ -2861,9 +3185,13 @@ public class BlockManager : MonoBehaviour
         template.SetActive(false);
 
         Vector2Int footprint = GetValidFootprint(definition);
+        Vector2 blockSize = isUiSize
+            ? new Vector2(2f, 1f)
+            : new Vector2(footprint.x, footprint.y);
         BoxCollider2D collider = template.AddComponent<BoxCollider2D>();
-        collider.size = new Vector2(footprint.x, footprint.y);
+        collider.size = blockSize;
         collider.isTrigger = false;
+        definition.usesDynamicCollider = isBigUi || isUiSize;
 
         GameObject visual = new GameObject("Visual");
         visual.transform.SetParent(template.transform, false);
@@ -2883,8 +3211,8 @@ public class BlockManager : MonoBehaviour
         {
             Vector2 spriteSize = renderer.sprite.bounds.size;
             Vector3 visualScale = new Vector3(
-                spriteSize.x > Mathf.Epsilon ? footprint.x / spriteSize.x : 1f,
-                spriteSize.y > Mathf.Epsilon ? footprint.y / spriteSize.y : 1f,
+                spriteSize.x > Mathf.Epsilon ? blockSize.x / spriteSize.x : 1f,
+                spriteSize.y > Mathf.Epsilon ? blockSize.y / spriteSize.y : 1f,
                 1f);
             visual.transform.localScale = visualScale;
             Vector3 spriteCenter = renderer.sprite.bounds.center;
@@ -2894,7 +3222,23 @@ public class BlockManager : MonoBehaviour
                 0f);
         }
 
-        if (isMoveRight)
+        if (isUiSize)
+        {
+            UiSizeBlock sizeBlock = template.AddComponent<UiSizeBlock>();
+            sizeBlock.Configure(
+                this,
+                collider,
+                renderer,
+                playerBody,
+                playerCollider,
+                definition.size100Sprite,
+                definition.size30Sprite,
+                definition.size0Sprite,
+                definition.size100SelectedSprite,
+                definition.size30SelectedSprite,
+                definition.size0SelectedSprite);
+        }
+        else if (isMoveRight)
         {
             MoveR moveRight = template.AddComponent<MoveR>();
             moveRight.Configure(playerBody, definition.moveSpeed);
@@ -2928,7 +3272,24 @@ public class BlockManager : MonoBehaviour
                 playerBody != null ? playerBody.GetComponent<Player>() : null,
                 renderer,
                 renderer.sprite,
-                definition.saveLoadSprite);
+                definition.saveLoadSprite,
+                definition.compactUiSprite,
+                definition.compactAlternateUiSprite);
+        }
+
+        if (isBigUi)
+        {
+            Vector2 compactSize = isBigJump || isBigSave
+                ? new Vector2(2f, 1f)
+                : Vector2.one;
+            BigUiBlock bigUiBlock = template.AddComponent<BigUiBlock>();
+            bigUiBlock.Configure(
+                renderer,
+                collider,
+                renderer.sprite,
+                definition.compactUiSprite,
+                new Vector2(footprint.x, footprint.y),
+                compactSize);
         }
 
         definition.worldTemplate = template;
@@ -3542,8 +3903,8 @@ public class BlockManager : MonoBehaviour
         EndPlacedBlockOperation();
         StopBgmHandlePlayerMotion();
         activeBgmScrollBar = null;
+        playerAttachedBgmScrollBar = null;
         pressedPlayModeBlock = null;
-        isPlayerAttachedToBgmHandle = false;
         IsPlayerCrushedByScrollBar = false;
         HideAllPlayModeHoverOutlines();
         hoveredPlacedBlockForSound = null;

@@ -22,6 +22,9 @@ public sealed class BlockManagerEditor : Editor
         public readonly bool IsPauseBlock;
         public readonly bool IsRetryBlock;
         public readonly bool IsSaveBlock;
+        public readonly bool IsBigUiBlock;
+        public readonly bool IsUiSizeBlock;
+        public readonly string CompactSpritePath;
 
         public BlockPreset(
             string name,
@@ -34,7 +37,10 @@ public sealed class BlockManagerEditor : Editor
             bool isPopupBlock = false,
             bool isPauseBlock = false,
             bool isRetryBlock = false,
-            bool isSaveBlock = false)
+            bool isSaveBlock = false,
+            bool isBigUiBlock = false,
+            bool isUiSizeBlock = false,
+            string compactSpritePath = null)
         {
             Name = name;
             SpritePath = spritePath;
@@ -47,6 +53,9 @@ public sealed class BlockManagerEditor : Editor
             IsPauseBlock = isPauseBlock;
             IsRetryBlock = isRetryBlock;
             IsSaveBlock = isSaveBlock;
+            IsBigUiBlock = isBigUiBlock;
+            IsUiSizeBlock = isUiSizeBlock;
+            CompactSpritePath = compactSpritePath;
         }
 
         public bool IsScrollBar => IsBgmScrollBar || IsBrightnessScrollBar;
@@ -80,7 +89,37 @@ public sealed class BlockManagerEditor : Editor
             "Save",
             "Assets/Sprites/Block/Save.png",
             new Vector2Int(2, 1),
-            isSaveBlock: true)
+            isSaveBlock: true),
+        new BlockPreset(
+            "Save_big",
+            "Assets/Sprites/Block/Save_big.png",
+            new Vector2Int(6, 3),
+            isSaveBlock: true,
+            isBigUiBlock: true,
+            compactSpritePath: "Assets/Sprites/Block/Save.png"),
+        new BlockPreset(
+            "MoveR_big",
+            "Assets/Sprites/Block/MoveR_big.png",
+            new Vector2Int(3, 3),
+            isBigUiBlock: true,
+            compactSpritePath: "Assets/Sprites/Block/MoveR.png"),
+        new BlockPreset(
+            "MoveL_big",
+            "Assets/Sprites/Block/MoveL_big.png",
+            new Vector2Int(3, 3),
+            isBigUiBlock: true,
+            compactSpritePath: "Assets/Sprites/Block/MoveL.png"),
+        new BlockPreset(
+            "Jump_big",
+            "Assets/Sprites/Block/Jump_big.png",
+            new Vector2Int(6, 3),
+            isBigUiBlock: true,
+            compactSpritePath: "Assets/Sprites/Block/Jump.png"),
+        new BlockPreset(
+            "Size",
+            "Assets/Sprites/Block/Size.png",
+            new Vector2Int(2, 3),
+            isUiSizeBlock: true)
     };
 
     private SerializedProperty blocksProperty;
@@ -152,11 +191,67 @@ public sealed class BlockManagerEditor : Editor
         }
 
         EditorGUILayout.Space();
-        DrawPropertiesExcluding(serializedObject, "m_Script", "blocks", "blockAvailabilityVersion");
+        DrawPropertiesExcludingDontSaveReferences(
+            serializedObject,
+            "m_Script",
+            "blocks",
+            "blockAvailabilityVersion");
         EditorGUILayout.Space();
         EditorGUILayout.LabelField("ブロック詳細設定", EditorStyles.boldLabel);
         EditorGUILayout.PropertyField(blocksProperty, true);
         serializedObject.ApplyModifiedProperties();
+    }
+
+    private static void DrawPropertiesExcludingDontSaveReferences(
+        SerializedObject targetObject,
+        params string[] excludedProperties)
+    {
+        SerializedProperty property = targetObject.GetIterator();
+        bool enterChildren = true;
+
+        while (property.NextVisible(enterChildren))
+        {
+            enterChildren = false;
+            if (IsExcludedProperty(property.name, excludedProperties))
+            {
+                continue;
+            }
+
+            // Runtime-generated Unity objects commonly use DontSaveInEditor. Passing one to
+            // EditorGUILayout.PropertyField makes Unity try to treat it as a persistent object
+            // and raises an assertion in Unity 6, so show it without an ObjectField instead.
+            if (property.propertyType == SerializedPropertyType.ObjectReference)
+            {
+                UnityEngine.Object referencedObject = property.objectReferenceValue;
+                if (referencedObject != null &&
+                    (referencedObject.hideFlags & HideFlags.DontSaveInEditor) != 0)
+                {
+                    using (new EditorGUI.DisabledScope(true))
+                    {
+                        EditorGUILayout.TextField(
+                            property.displayName,
+                            $"{referencedObject.name} (Runtime Only)");
+                    }
+
+                    continue;
+                }
+            }
+
+            EditorGUILayout.PropertyField(property, true);
+        }
+    }
+
+    private static bool IsExcludedProperty(string propertyName, string[] excludedProperties)
+    {
+        foreach (string excludedProperty in excludedProperties)
+        {
+            if (propertyName == excludedProperty)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void SetBlockCount(BlockPreset preset, int count)
@@ -196,7 +291,15 @@ public sealed class BlockManagerEditor : Editor
             ClearMismatchedBrightnessReferences(definition);
         }
 
-        definition.FindPropertyRelative("displayName").stringValue = preset.Name;
+            definition.FindPropertyRelative("displayName").stringValue = preset.Name;
+            definition.FindPropertyRelative("isBigUiBlock").boolValue = preset.IsBigUiBlock;
+            definition.FindPropertyRelative("isUiSizeBlock").boolValue = preset.IsUiSizeBlock;
+            if (preset.IsUiSizeBlock)
+            {
+                definition.FindPropertyRelative("footprint").vector2IntValue = preset.Footprint;
+                definition.FindPropertyRelative("placementOffset").vector3Value =
+                    new Vector3(0f, -1f, 0f);
+            }
 
         if (enabled)
         {
@@ -228,13 +331,23 @@ public sealed class BlockManagerEditor : Editor
             SetSourceActive(sourceRoot, true);
 
             Image sourceImage = source.GetComponent<Image>() ?? source.GetComponentInChildren<Image>(true);
-            if (string.Equals(preset.Name, "Jump", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(preset.Name, "Jump", StringComparison.OrdinalIgnoreCase) ||
+                preset.IsBigUiBlock || preset.IsUiSizeBlock)
             {
                 Undo.RecordObject(source, "Jumpブロックのサイズを更新");
-                source.sizeDelta = new Vector2(
-                    preset.Footprint.x * 100f,
-                    preset.Footprint.y * 100f);
+                source.sizeDelta = preset.IsUiSizeBlock
+                    ? new Vector2(200f, 100f)
+                    : new Vector2(
+                        preset.Footprint.x * 100f,
+                        preset.Footprint.y * 100f);
                 EditorUtility.SetDirty(source);
+            }
+
+            if (preset.IsUiSizeBlock && sourceImage != null)
+            {
+                Undo.RecordObject(sourceImage, "Sizeブロックの表示サイズを更新");
+                sourceImage.preserveAspect = false;
+                EditorUtility.SetDirty(sourceImage);
             }
 
             if (preset.IsRetryBlock)
@@ -313,7 +426,45 @@ public sealed class BlockManagerEditor : Editor
                     : null;
             definition.FindPropertyRelative("saveLoadSprite").objectReferenceValue =
                 preset.IsSaveBlock
+                    ? preset.IsBigUiBlock
+                        ? FindSprite("Assets/Sprites/Block/Load_big.png", "Load_big_0")
+                        : FindSprite("Assets/Sprites/Block/Load.png", "Load_0")
+                    : null;
+            definition.FindPropertyRelative("compactUiSprite").objectReferenceValue =
+                preset.IsBigUiBlock
+                    ? FindSpriteAtPath(preset.CompactSpritePath)
+                    : null;
+            definition.FindPropertyRelative("compactAlternateUiSprite").objectReferenceValue =
+                preset.IsSaveBlock && preset.IsBigUiBlock
                     ? FindSprite("Assets/Sprites/Block/Load.png", "Load_0")
+                    : null;
+            definition.FindPropertyRelative("size100Sprite").objectReferenceValue =
+                preset.IsUiSizeBlock
+                    ? FindSprite("Assets/Sprites/Block/100%.png", "100%_0")
+                    : null;
+            definition.FindPropertyRelative("size30Sprite").objectReferenceValue =
+                preset.IsUiSizeBlock
+                    ? FindSprite("Assets/Sprites/Block/30%.png", "30%_0")
+                    : null;
+            definition.FindPropertyRelative("size0Sprite").objectReferenceValue =
+                preset.IsUiSizeBlock
+                    ? FindSprite("Assets/Sprites/Block/0%.png", "0%_0")
+                    : null;
+            definition.FindPropertyRelative("size100SelectedSprite").objectReferenceValue =
+                preset.IsUiSizeBlock
+                    ? FindSprite("Assets/Sprites/Block/100%_selected.png", "100%_selected_0")
+                    : null;
+            definition.FindPropertyRelative("size30SelectedSprite").objectReferenceValue =
+                preset.IsUiSizeBlock
+                    ? FindSprite("Assets/Sprites/Block/30%_selected.png", "30%_selected_0")
+                    : null;
+            definition.FindPropertyRelative("size0SelectedSprite").objectReferenceValue =
+                preset.IsUiSizeBlock
+                    ? FindSprite("Assets/Sprites/Block/0%_selected.png", "0%_selected_0")
+                    : null;
+            definition.FindPropertyRelative("sizePopupSprite").objectReferenceValue =
+                preset.IsUiSizeBlock
+                    ? FindSprite("Assets/Sprites/UI/PopUp.png", "PopUp_0")
                     : null;
 
             EnsureAdditionalSources(
@@ -339,7 +490,9 @@ public sealed class BlockManagerEditor : Editor
         definition.FindPropertyRelative("additionalDragSources").ClearArray();
         definition.FindPropertyRelative("worldTemplate").objectReferenceValue = null;
         definition.FindPropertyRelative("footprint").vector2IntValue = preset.Footprint;
-        definition.FindPropertyRelative("placementOffset").vector3Value = Vector3.zero;
+        definition.FindPropertyRelative("placementOffset").vector3Value = preset.IsUiSizeBlock
+            ? new Vector3(0f, -1f, 0f)
+            : Vector3.zero;
         definition.FindPropertyRelative("availableCount").intValue = 1;
         definition.FindPropertyRelative("hideSourceWhenExhausted").boolValue = true;
         definition.FindPropertyRelative("sourceVisualRoot").objectReferenceValue = null;
@@ -351,8 +504,11 @@ public sealed class BlockManagerEditor : Editor
         definition.FindPropertyRelative("isPauseBlock").boolValue = preset.IsPauseBlock;
         definition.FindPropertyRelative("isRetryBlock").boolValue = preset.IsRetryBlock;
         definition.FindPropertyRelative("isSaveBlock").boolValue = preset.IsSaveBlock;
+        definition.FindPropertyRelative("isBigUiBlock").boolValue = preset.IsBigUiBlock;
+        definition.FindPropertyRelative("isUiSizeBlock").boolValue = preset.IsUiSizeBlock;
         definition.FindPropertyRelative("usesDynamicCollider").boolValue =
-            preset.IsRandomStepBlock || preset.IsUpwardDropdownBlock || preset.IsPopupBlock;
+            preset.IsRandomStepBlock || preset.IsUpwardDropdownBlock || preset.IsPopupBlock ||
+            preset.IsBigUiBlock || preset.IsUiSizeBlock;
         definition.FindPropertyRelative("moveSpeed").floatValue = 5f;
         definition.FindPropertyRelative("jumpPower").floatValue = 15f;
         definition.FindPropertyRelative("bgmTrackSource").objectReferenceValue = null;
@@ -361,6 +517,15 @@ public sealed class BlockManagerEditor : Editor
         definition.FindPropertyRelative("brightnessScrollBarSprite").objectReferenceValue = null;
         definition.FindPropertyRelative("pausePlaySprite").objectReferenceValue = null;
         definition.FindPropertyRelative("saveLoadSprite").objectReferenceValue = null;
+        definition.FindPropertyRelative("compactUiSprite").objectReferenceValue = null;
+        definition.FindPropertyRelative("compactAlternateUiSprite").objectReferenceValue = null;
+        definition.FindPropertyRelative("size100Sprite").objectReferenceValue = null;
+        definition.FindPropertyRelative("size30Sprite").objectReferenceValue = null;
+        definition.FindPropertyRelative("size0Sprite").objectReferenceValue = null;
+        definition.FindPropertyRelative("size100SelectedSprite").objectReferenceValue = null;
+        definition.FindPropertyRelative("size30SelectedSprite").objectReferenceValue = null;
+        definition.FindPropertyRelative("size0SelectedSprite").objectReferenceValue = null;
+        definition.FindPropertyRelative("sizePopupSprite").objectReferenceValue = null;
     }
 
     private static void ClearMismatchedBrightnessReferences(SerializedProperty definition)
@@ -463,10 +628,14 @@ public sealed class BlockManagerEditor : Editor
         source.SetAsLastSibling();
         source.sizeDelta = preset.IsBrightnessScrollBar
             ? new Vector2(100f, 400f)
-            : preset.IsScrollBar
-                ? new Vector2(400f, 100f)
-                : preset.IsRetryBlock
-                    ? new Vector2(preset.Footprint.x * 100f, preset.Footprint.y * 100f)
+             : preset.IsScrollBar
+                 ? new Vector2(400f, 100f)
+                 : preset.IsBigUiBlock
+                     ? new Vector2(preset.Footprint.x * 100f, preset.Footprint.y * 100f)
+                 : preset.IsUiSizeBlock
+                     ? new Vector2(200f, 100f)
+                 : preset.IsRetryBlock
+                     ? new Vector2(preset.Footprint.x * 100f, preset.Footprint.y * 100f)
                     : preset.IsSaveBlock
                         ? new Vector2(200f, 100f)
                     : preset.IsPauseBlock
@@ -480,10 +649,10 @@ public sealed class BlockManagerEditor : Editor
             ? FindSprite("Assets/Sprites/UI/BrightnessScrollBar.png", "BrightnessScrollBar_0")
             : preset.IsBgmScrollBar
                 ? FindSprite("Assets/Sprites/UI/BGMScrollBarShadow.png", "BGMScrollBarShadow_0")
-            : string.IsNullOrWhiteSpace(preset.SpritePath)
-                ? null
-                : AssetDatabase.LoadAssetAtPath<Sprite>(preset.SpritePath);
-        image.preserveAspect = true;
+             : string.IsNullOrWhiteSpace(preset.SpritePath)
+                 ? null
+                 : FindSpriteAtPath(preset.SpritePath);
+        image.preserveAspect = !preset.IsUiSizeBlock;
         image.raycastTarget = true;
 
         if (preset.IsRandomStepBlock || preset.IsUpwardDropdownBlock || preset.IsPopupBlock)
@@ -1010,6 +1179,17 @@ public sealed class BlockManagerEditor : Editor
         }
 
         return fallback;
+    }
+
+    private static Sprite FindSpriteAtPath(string assetPath)
+    {
+        if (string.IsNullOrWhiteSpace(assetPath))
+        {
+            return null;
+        }
+
+        string spriteName = $"{System.IO.Path.GetFileNameWithoutExtension(assetPath)}_0";
+        return FindSprite(assetPath, spriteName);
     }
 
     private static void PositionAfterExistingSources(RectTransform source, RectTransform parent)

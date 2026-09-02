@@ -2,18 +2,17 @@ using UnityEngine;
 using UnityEngine.UI;
 
 /// <summary>
-/// ゲーム世界とUIの間に置くSpriteRendererの透明度を使って、ステージの明るさを制御します。
+/// 画面全体を覆うCanvas Imageの透明度を使って、ステージの明るさを制御します。
+/// 明るさバーだけは専用の前面レイヤーへ複製し、暗転の対象外にします。
 /// 1が通常の明るさ、0が最も暗い状態です。
 /// </summary>
 [DisallowMultipleComponent]
 public sealed class ScreenBrightnessController : MonoBehaviour
 {
-    private const string OverlaySortingLayer = "BrightnessOverlay";
-
-    [Tooltip("旧Canvas暗転Imageです。実行中は無効化し、ワールド側の専用レイヤーを使用します。")]
+    [Tooltip("画面全体（UIを含む）を暗くするCanvas Imageです。")]
     [SerializeField] private Image darknessOverlay;
 
-    [Tooltip("旧Canvas暗転用の前面表示レイヤーです。ワールド側暗転では使用しません。")]
+    [Tooltip("暗転の対象外にする明るさバーを表示する前面レイヤーです。")]
     [SerializeField] private RectTransform visibilityLayer;
 
     [Range(0f, 1f)]
@@ -26,81 +25,29 @@ public sealed class ScreenBrightnessController : MonoBehaviour
     public float Brightness { get; private set; } = 1f;
 
     public RectTransform VisibilityLayer => visibilityLayer;
-    public bool UsesWorldOverlay => true;
-
-    private Texture2D worldOverlayTexture;
-    private Sprite worldOverlaySprite;
-    private SpriteRenderer worldOverlayRenderer;
-    private Camera targetCamera;
-    private bool overlayHiddenForSceneView;
-
-    private void OnEnable()
-    {
-        Camera.onPreCull -= HandleCameraPreCull;
-        Camera.onPostRender -= HandleCameraPostRender;
-        Camera.onPreCull += HandleCameraPreCull;
-        Camera.onPostRender += HandleCameraPostRender;
-    }
-
-    private void OnDisable()
-    {
-        Camera.onPreCull -= HandleCameraPreCull;
-        Camera.onPostRender -= HandleCameraPostRender;
-        if (worldOverlayRenderer != null && overlayHiddenForSceneView)
-        {
-            worldOverlayRenderer.enabled = true;
-        }
-        overlayHiddenForSceneView = false;
-    }
+    public bool UsesWorldOverlay => false;
 
     private void Awake()
     {
         if (darknessOverlay != null)
         {
-            darknessOverlay.enabled = false;
+            darknessOverlay.enabled = true;
             darknessOverlay.raycastTarget = false;
         }
 
-        EnsureWorldOverlay();
+        EnsureOverlayOrder();
         ResetBrightness();
     }
 
-    private void LateUpdate() => SyncWorldOverlayToCamera();
+    private void LateUpdate() => EnsureOverlayOrder();
 
-    private void HandleCameraPreCull(Camera renderingCamera)
+    private void EnsureOverlayOrder()
     {
-        if (worldOverlayRenderer == null)
-        {
-            return;
-        }
+        // PauseやResultが実行中に描画順を変更しても、暗転を常にその手前へ戻します。
+        darknessOverlay?.rectTransform.SetAsLastSibling();
 
-        if (renderingCamera != null && renderingCamera.cameraType == CameraType.SceneView)
-        {
-            overlayHiddenForSceneView = worldOverlayRenderer.enabled;
-            worldOverlayRenderer.enabled = false;
-            return;
-        }
-
-        // Sceneビューの描画が中断された場合でもGameカメラでは必ず復帰させます。
-        if (overlayHiddenForSceneView)
-        {
-            worldOverlayRenderer.enabled = true;
-            overlayHiddenForSceneView = false;
-        }
-    }
-
-    private void HandleCameraPostRender(Camera renderingCamera)
-    {
-        if (worldOverlayRenderer == null ||
-            renderingCamera == null ||
-            renderingCamera.cameraType != CameraType.SceneView ||
-            !overlayHiddenForSceneView)
-        {
-            return;
-        }
-
-        worldOverlayRenderer.enabled = true;
-        overlayHiddenForSceneView = false;
+        // 明るさバーの複製だけを暗転Imageより後に描画します。
+        visibilityLayer?.SetAsLastSibling();
     }
 
     public void SetBrightness(float brightness)
@@ -117,69 +64,12 @@ public sealed class ScreenBrightnessController : MonoBehaviour
         Color color = new Color32(0x3C, 0x3C, 0x3C, 0xFF);
         color.a = 1f - Brightness;
 
-        if (worldOverlayRenderer != null)
+        if (darknessOverlay != null)
         {
-            worldOverlayRenderer.color = color;
-        }
-
-        if (!Application.isPlaying && darknessOverlay != null)
-        {
+            darknessOverlay.enabled = true;
             darknessOverlay.color = color;
             darknessOverlay.raycastTarget = false;
         }
-    }
-
-    private void EnsureWorldOverlay()
-    {
-        if (!Application.isPlaying || worldOverlayRenderer != null)
-        {
-            return;
-        }
-
-        targetCamera = Camera.main;
-        worldOverlayTexture = new Texture2D(1, 1, TextureFormat.RGBA32, false)
-        {
-            name = "Brightness Overlay Texture",
-            hideFlags = HideFlags.HideAndDontSave
-        };
-        worldOverlayTexture.SetPixel(0, 0, Color.white);
-        worldOverlayTexture.Apply();
-        worldOverlaySprite = Sprite.Create(
-            worldOverlayTexture,
-            new Rect(0f, 0f, 1f, 1f),
-            new Vector2(0.5f, 0.5f),
-            1f);
-        worldOverlaySprite.name = "Brightness Overlay Sprite";
-        worldOverlaySprite.hideFlags = HideFlags.HideAndDontSave;
-
-        GameObject overlayObject = new GameObject("Brightness World Overlay");
-        overlayObject.transform.SetParent(transform, false);
-        worldOverlayRenderer = overlayObject.AddComponent<SpriteRenderer>();
-        worldOverlayRenderer.sprite = worldOverlaySprite;
-        worldOverlayRenderer.sortingLayerName = OverlaySortingLayer;
-        worldOverlayRenderer.sortingOrder = 0;
-        SyncWorldOverlayToCamera();
-    }
-
-    private void SyncWorldOverlayToCamera()
-    {
-        if (worldOverlayRenderer == null)
-        {
-            return;
-        }
-
-        targetCamera ??= Camera.main;
-        if (targetCamera == null || !targetCamera.orthographic)
-        {
-            return;
-        }
-
-        float height = targetCamera.orthographicSize * 2f;
-        float width = height * targetCamera.aspect;
-        Transform overlay = worldOverlayRenderer.transform;
-        Vector3 cameraPosition = targetCamera.transform.position;
-        overlay.position = new Vector3(cameraPosition.x, cameraPosition.y, cameraPosition.z + 1f);
-        overlay.localScale = new Vector3(width, height, 1f);
     }
 
     private void OnValidate()
@@ -191,21 +81,6 @@ public sealed class ScreenBrightnessController : MonoBehaviour
         {
             Brightness = defaultBrightness;
             ApplyOverlay();
-        }
-    }
-
-    private void OnDestroy()
-    {
-        Camera.onPreCull -= HandleCameraPreCull;
-        Camera.onPostRender -= HandleCameraPostRender;
-
-        if (worldOverlaySprite != null)
-        {
-            Destroy(worldOverlaySprite);
-        }
-        if (worldOverlayTexture != null)
-        {
-            Destroy(worldOverlayTexture);
         }
     }
 }

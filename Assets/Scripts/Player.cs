@@ -53,6 +53,7 @@ public class Player : MonoBehaviour
     [SerializeField] private Collider2D playerCollider;
     [SerializeField] private SpriteRenderer playerRenderer;
     [SerializeField] private StageManager stageManager;
+    [SerializeField] private BlockManager blockManager;
 
     [Header("Idleスプライト")]
     [SerializeField] private Sprite idle0;
@@ -105,10 +106,11 @@ public class Player : MonoBehaviour
         playerCollider ??= GetComponent<Collider2D>();
         playerRenderer ??= GetComponent<SpriteRenderer>();
         stageManager ??= FindFirstObjectByType<StageManager>();
-        ResetAnimation();
+        blockManager ??= FindFirstObjectByType<BlockManager>();
+        ResetToIdle();
     }
 
-    private void OnEnable() => ResetAnimation();
+    private void OnEnable() => ResetToIdle();
 
     public AnimationSnapshot CaptureAnimationState() => new AnimationSnapshot(
         (int)animationState,
@@ -187,7 +189,9 @@ public class Player : MonoBehaviour
         }
         else if (!wasGrounded)
         {
-            EnterState(AnimationState.Landing);
+            EnterState(HasMovementBlockInput()
+                ? GetGroundedMovementState()
+                : AnimationState.Landing);
         }
         else if (animationState == AnimationState.Landing)
         {
@@ -215,8 +219,12 @@ public class Player : MonoBehaviour
         playerCollider != null &&
         playerRenderer != null &&
         playerBody.simulated &&
+        (blockManager == null || !blockManager.IsPlayerStopped) &&
         (stageManager == null ||
          (stageManager.CurrentMode == StageManager.StageMode.Play && !stageManager.IsPaused));
+
+    private bool HasMovementBlockInput() =>
+        blockManager != null && blockManager.HasPlayerMovementInput;
 
     private void UpdateFacingDirection()
     {
@@ -364,9 +372,12 @@ public class Player : MonoBehaviour
 
     private bool IsGroundLayer(int layer) => (groundLayers.value & (1 << layer)) != 0;
 
-    private void ResetAnimation()
+    /// <summary>アニメーションの進行と向きをリセットし、Idle0を表示します。</summary>
+    public void ResetToIdle()
     {
+        playerRenderer ??= GetComponent<SpriteRenderer>();
         hasStateSample = false;
+        wasGrounded = false;
         animationState = AnimationState.Idle;
         frameIndex = 0;
         frameTimer = 0f;
@@ -374,6 +385,7 @@ public class Player : MonoBehaviour
         if (playerRenderer != null)
         {
             playerRenderer.flipX = false;
+            playerRenderer.flipY = false;
             if (idle0 != null)
             {
                 playerRenderer.sprite = idle0;
