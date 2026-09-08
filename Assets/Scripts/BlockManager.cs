@@ -46,6 +46,8 @@ public class BlockManager : MonoBehaviour
     public Shader PlayModeHoverOutlineShader => playModeHoverOutlineShader;
     public float PlayModeHoverOutlineWidth => playModeHoverOutlineWidth;
     public bool IsBuildMode { get; private set; } = true;
+    public bool CanOperatePlacedBlocks => isActiveAndEnabled && !IsBuildMode &&
+        (stageManager == null || !stageManager.IsPlayerDying);
     public bool IsPlayerCrushedByScrollBar { get; private set; }
 
     public void ReportPlayerCrushedByMovingBlock()
@@ -217,6 +219,7 @@ public class BlockManager : MonoBehaviour
         public IBlockOperationState[] operationStates;
         public IPlayModeBlockState[] playModeStates;
         public SpriteRenderer[] hoverOutlineRenderers;
+        public BlockOutlineGraphic[] overlayOutlines;
         public bool isColorInverted;
         public Transform bgmHandle;
         public Collider2D bgmHandleCollider;
@@ -281,10 +284,10 @@ public class BlockManager : MonoBehaviour
     [Header("BGMScrollBar")]
     [Tooltip("プレイモード中、ハンドル右側にあるTrackの不透明度です。0で完全透明、1で不透明です。")]
     [Range(0f, 1f)]
-    [SerializeField] private float bgmTrackRightOpacity = 0.25f;
+    [SerializeField] private float bgmTrackRightOpacity = 0.4f;
 
     [Tooltip("BGMScrollBarのTrack全体に使用する色です。右側にはこの色とRight Opacityの両方が適用されます。")]
-    [SerializeField] private Color bgmTrackColor = new Color(0.23137257f, 0.23137257f, 0.23137257f, 1f);
+    [SerializeField] private Color bgmTrackColor = new Color(0.4392157f, 0.4392157f, 0.4392157f, 1f);
 
     [Tooltip("BGMScrollBarをドラッグ中、配置予定位置の透過表示に使用するSpriteです。")]
     [SerializeField] private Sprite bgmScrollBarShadowSprite;
@@ -378,6 +381,7 @@ public class BlockManager : MonoBehaviour
     private TilemapCollider2D placementTilemapCollider;
     private Material operationInversionMaterial;
     private Material playModeHoverOutlineMaterial;
+    private Material brightnessTrackOverlayMaterial;
     private Texture2D runtimeSolidTexture;
     private Sprite runtimeSolidSprite;
     private Texture2D runtimeVariableBlockFrameTexture;
@@ -616,10 +620,14 @@ public class BlockManager : MonoBehaviour
     private void Update()
     {
         UpdateBgmTrackVisuals(IsBuildMode);
-        UpdateBrightnessVisibilityVisuals();
 
         if (!IsBuildMode)
         {
+            if (!CanOperatePlacedBlocks)
+            {
+                return;
+            }
+
             UpdateBgmScrollBarInteraction();
             UpdateClickBlockInteraction();
             UpdateOperationColors();
@@ -662,6 +670,14 @@ public class BlockManager : MonoBehaviour
         PlacedBlock hovered = allowHover && activePreview == null
             ? FindPlacedBlockForBuildMode(screenPosition)
             : null;
+        // Tracks remain draggable, but only handles trigger scrollbar hover visuals.
+        if (hovered != null && IsScrollBar(hovered.definition) &&
+            (hovered.bgmHandleCollider == null || !hovered.bgmHandleCollider.enabled ||
+             !hovered.bgmHandleCollider.OverlapPoint(ScreenToWorld(screenPosition))))
+        {
+            hovered = null;
+        }
+
         if (hovered != hoveredPlacedBlockForSound)
         {
             hoveredPlacedBlockForSound = hovered;
@@ -1047,7 +1063,7 @@ public class BlockManager : MonoBehaviour
     /// 指定した画面座標に配置済みブロックがあるかを返します。
     /// </summary>
     public bool HasPlacedBlockAtScreenPosition(Vector2 screenPosition) =>
-        !IsBuildMode &&
+        CanOperatePlacedBlocks &&
         placementCamera != null &&
         placementTilemap != null &&
         FindPlacedBlock(screenPosition) != null;
@@ -1057,7 +1073,7 @@ public class BlockManager : MonoBehaviour
     /// </summary>
     public bool TryBeginPlacedBlockOperation(Vector2 screenPosition)
     {
-        if (IsBuildMode || placementCamera == null || placementTilemap == null)
+        if (!CanOperatePlacedBlocks || placementCamera == null || placementTilemap == null)
         {
             return false;
         }
@@ -1091,6 +1107,24 @@ public class BlockManager : MonoBehaviour
         pointerOperationStates.Clear();
     }
 
+    public void CancelAllPlacedBlockOperations()
+    {
+        EndPlacedBlockOperation();
+        StopBgmHandlePlayerMotion();
+        activeBgmScrollBar = null;
+        playerAttachedBgmScrollBar = null;
+        pressedPlayModeBlock = null;
+        foreach (PlacedBlock block in placedBlocks)
+        {
+            foreach (IBlockOperationState state in block.operationStates)
+            {
+                state.CancelOperation();
+            }
+            ApplyOperationColor(block, false);
+        }
+        HideAllPlayModeHoverOutlines();
+    }
+
     private Vector3 ScreenToWorld(Vector2 screenPosition)
     {
         float depth = Mathf.Abs(placementCamera.transform.position.z - placementTilemap.transform.position.z);
@@ -1106,14 +1140,15 @@ public class BlockManager : MonoBehaviour
         }
 
         PlacedBlock block = FindPlacedBlock(screenPosition);
-        if (block?.operationStates == null)
+        if (block?.instance == null)
         {
             return;
         }
 
-        foreach (IBlockOperationState state in block.operationStates)
+        MonoBehaviour[] behaviours = block.instance.GetComponentsInChildren<MonoBehaviour>(true);
+        foreach (MonoBehaviour behaviour in behaviours)
         {
-            if (state is IBlockClickState clickState)
+            if (behaviour is IBlockClickState clickState)
             {
                 // 上部ウィンドウ等の透明なUIが画面全体を覆うシーンでも、
                 // 配置済みクリックブロック自身に当たっていれば操作を優先します。
@@ -1245,6 +1280,12 @@ public class BlockManager : MonoBehaviour
         RegisterOccupiedCells(activeDefinition, cell);
 
         PlacedBlock block = activePlacedBlock ?? CreatePlacedBlock();
+        BlockInputGuard inputGuard = block.instance.GetComponent<BlockInputGuard>();
+        if (inputGuard == null)
+        {
+            inputGuard = block.instance.AddComponent<BlockInputGuard>();
+        }
+        inputGuard.Configure(this);
         block.cell = cell;
         block.isBgmVertical = IsScrollBar(activeDefinition) && activeDefinition.isBgmVertical;
         block.instance.transform.localScale = block.baseScale;
@@ -1297,6 +1338,12 @@ public class BlockManager : MonoBehaviour
             ApplyOperationColor(block, false);
             ApplyBgmTrackVisual(block, isBuildMode);
             ApplyBgmTrackDepth(block, isBuildMode);
+
+            // Build-mode hover scales the hierarchy, including the handle collider.
+            if (block.instance != null)
+            {
+                block.instance.transform.localScale = block.baseScale;
+            }
 
             foreach (IPlayModeBlockState state in block.playModeStates)
             {
@@ -1725,17 +1772,21 @@ public class BlockManager : MonoBehaviour
         Physics2D.SyncTransforms();
         Bounds handleBounds = block.bgmHandleCollider.bounds;
         Bounds playerBounds = playerCollider.bounds;
-        const float contactTolerance = 0.2f;
+        float contactTolerance = Physics2D.defaultContactOffset;
         bool overlapsHorizontally =
             playerBounds.max.x > handleBounds.min.x &&
             playerBounds.min.x < handleBounds.max.x;
         bool isAboveHandle = playerBounds.center.y > handleBounds.center.y;
         float verticalGap = playerBounds.min.y - handleBounds.max.y;
         ColliderDistance2D distance = playerCollider.Distance(block.bgmHandleCollider);
-        bool isInContact = playerCollider.IsTouching(block.bgmHandleCollider) ||
-                           distance.isOverlapped ||
-                           distance.distance <= contactTolerance ||
-                           Mathf.Abs(verticalGap) <= contactTolerance;
+        // Resting polygons can retain a gap larger than one contact offset. Honor
+        // the physics contact within both colliders' margins, while keeping the
+        // non-contact fallback tight so the visual outline cannot carry the player.
+        bool hasSupportingContact = playerCollider.IsTouching(block.bgmHandleCollider) &&
+                                    Mathf.Abs(verticalGap) <= contactTolerance * 2f;
+        bool isInContact = hasSupportingContact ||
+                           (Mathf.Abs(verticalGap) <= contactTolerance &&
+                            (distance.isOverlapped || distance.distance <= contactTolerance));
         if (!overlapsHorizontally || !isAboveHandle || !isInContact)
         {
             return false;
@@ -1815,10 +1866,13 @@ public class BlockManager : MonoBehaviour
             playerBody.angularVelocity = 0f;
             playerBody.WakeUp();
             IsPlayerStopped = true;
+            CancelAllPlacedBlockOperations();
+            playerBody.GetComponent<Player>()?.SetStoppedVisual(true);
             return;
         }
 
         IsPlayerStopped = false;
+        playerBody.GetComponent<Player>()?.SetStoppedVisual(false);
         if (hasPlayerStopPhysicsState)
         {
             playerBody.gravityScale = playerStopOriginalGravityScale;
@@ -1974,6 +2028,9 @@ public class BlockManager : MonoBehaviour
             isVertical);
     }
 
+    // Project the foreground copy after this frame's handle movement and brightness change.
+    private void LateUpdate() => UpdateBrightnessVisibilityVisuals();
+
     private void UpdateBrightnessVisibilityVisuals()
     {
         RectTransform visibilityLayer = brightnessController != null
@@ -1983,6 +2040,8 @@ public class BlockManager : MonoBehaviour
                           visibilityLayer != null &&
                           !brightnessController.UsesWorldOverlay &&
                           brightnessController.Brightness < 0.999f;
+
+        UpdateBrightnessTrackPlayerOcclusion(shouldShow);
 
         foreach (PlacedBlock block in placedBlocks)
         {
@@ -2059,8 +2118,34 @@ public class BlockManager : MonoBehaviour
             trackRightImage = trackRight.GetComponent<Image>(),
             handleImage = handle.GetComponent<Image>()
         };
+        block.brightnessVisibilityVisual.trackLeftImage.material = brightnessTrackOverlayMaterial;
+        block.brightnessVisibilityVisual.trackRightImage.material = brightnessTrackOverlayMaterial;
         rootObject.SetActive(false);
         return block.brightnessVisibilityVisual;
+    }
+
+    private void UpdateBrightnessTrackPlayerOcclusion(bool visible)
+    {
+        if (!visible)
+        {
+            return;
+        }
+
+        if (brightnessTrackOverlayMaterial == null)
+        {
+            Shader shader = Resources.Load<Shader>("BrightnessTrackOverlay");
+            if (shader == null)
+            {
+                return;
+            }
+            brightnessTrackOverlayMaterial = new Material(shader)
+            {
+                name = "Brightness Track (Behind Player)",
+                hideFlags = HideFlags.HideAndDontSave
+            };
+        }
+
+        // The mesh effect binds the sprite texture together with its matching vertex UVs.
     }
 
     private bool SyncBrightnessVisibilityVisual(
@@ -2129,7 +2214,20 @@ public class BlockManager : MonoBehaviour
         visual.handleImage.material = inverted && operationInversionMaterial != null
             ? operationInversionMaterial
             : null;
+        ConfigureBrightnessTrackPlayerMask(visual.trackLeftImage);
+        ConfigureBrightnessTrackPlayerMask(visual.trackRightImage);
         return true;
+    }
+
+    private void ConfigureBrightnessTrackPlayerMask(Image track)
+    {
+        track.material = brightnessTrackOverlayMaterial;
+        BrightnessTrackPlayerMask mask = track.GetComponent<BrightnessTrackPlayerMask>();
+        if (mask == null)
+        {
+            mask = track.gameObject.AddComponent<BrightnessTrackPlayerMask>();
+        }
+        mask.Configure(playerRenderer, placementCamera);
     }
 
     private bool TryWorldToVisibilityLocal(
@@ -2238,7 +2336,7 @@ public class BlockManager : MonoBehaviour
         {
             if (pressedPlayModeBlock == null && !IsPointerOverUi())
             {
-                pressedPlayModeBlock = activeBgmScrollBar ?? FindPlacedBlock(screenPosition);
+                pressedPlayModeBlock = activeBgmScrollBar ?? FindPlayModeOutlineBlock(screenPosition);
             }
         }
         else
@@ -2253,7 +2351,7 @@ public class BlockManager : MonoBehaviour
         PlacedBlock outlinedBlock = isPointerHeld
             ? pressedPlayModeBlock
             : allowHover
-                ? FindPlacedBlock(Input.mousePosition)
+                ? FindPlayModeOutlineBlock(Input.mousePosition)
                 : null;
 
         foreach (PlacedBlock block in placedBlocks)
@@ -2274,6 +2372,19 @@ public class BlockManager : MonoBehaviour
         }
     }
 
+    private PlacedBlock FindPlayModeOutlineBlock(Vector2 screenPosition)
+    {
+        PlacedBlock block = FindPlacedBlock(screenPosition);
+        if (block != null && IsScrollBar(block.definition) &&
+            (block.bgmHandleCollider == null || !block.bgmHandleCollider.enabled ||
+             !block.bgmHandleCollider.OverlapPoint(ScreenToWorld(screenPosition))))
+        {
+            return null;
+        }
+
+        return block;
+    }
+
     private void CreatePlayModeHoverOutlines(PlacedBlock block)
     {
         DestroyPlayModeHoverOutlines(block);
@@ -2284,12 +2395,23 @@ public class BlockManager : MonoBehaviour
 
         block.hoverOutlineRenderers = new SpriteRenderer[
             block.renderers.Length * HoverOutlineDirections.Length];
+        block.overlayOutlines = new BlockOutlineGraphic[block.renderers.Length];
         for (int i = 0; i < block.renderers.Length; i++)
         {
             SpriteRenderer source = block.renderers[i];
             if (!IsHoverOutlineSource(block, source))
             {
                 continue;
+            }
+
+            if (brightnessController != null && brightnessController.VisibilityLayer != null)
+            {
+                block.overlayOutlines[i] = BlockOutlineGraphic.Create(
+                    brightnessController.VisibilityLayer, source, placementCamera);
+                if (block.overlayOutlines[i] != null)
+                {
+                    continue;
+                }
             }
 
             for (int directionIndex = 0;
@@ -2333,6 +2455,15 @@ public class BlockManager : MonoBehaviour
             {
                 bool showSourceOutline =
                     ShouldShowPlayModeHoverOutlineForSource(block, source, visible);
+                BlockOutlineGraphic overlay = block.overlayOutlines != null &&
+                                              i < block.overlayOutlines.Length
+                    ? block.overlayOutlines[i]
+                    : null;
+                if (overlay != null)
+                {
+                    overlay.SetOutline(showSourceOutline, playModeHoverOutlineColor,
+                        playModeHoverOutlineWidth);
+                }
                 if (block.definition != null && block.definition.isUiSizeBlock)
                 {
                     bool isOption = IsUiSizeOptionRenderer(source);
@@ -2487,6 +2618,18 @@ public class BlockManager : MonoBehaviour
         }
 
         block.hoverOutlineRenderers = Array.Empty<SpriteRenderer>();
+        if (block.overlayOutlines != null)
+        {
+            foreach (BlockOutlineGraphic overlay in block.overlayOutlines)
+            {
+                if (overlay != null)
+                {
+                    overlay.gameObject.SetActive(false);
+                    Destroy(overlay.gameObject);
+                }
+            }
+        }
+        block.overlayOutlines = Array.Empty<BlockOutlineGraphic>();
     }
 
     private void ApplyOperationColor(PlacedBlock block, bool inverted)
@@ -3858,6 +4001,11 @@ public class BlockManager : MonoBehaviour
         if (playModeHoverOutlineMaterial != null)
         {
             Destroy(playModeHoverOutlineMaterial);
+        }
+
+        if (brightnessTrackOverlayMaterial != null)
+        {
+            Destroy(brightnessTrackOverlayMaterial);
         }
 
         if (runtimeSolidSprite != null)

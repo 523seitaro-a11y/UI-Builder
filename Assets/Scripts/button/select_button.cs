@@ -1,7 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 
 public class select_button : MonoBehaviour {
 
@@ -14,7 +13,7 @@ public class select_button : MonoBehaviour {
             return;
         }
 
-        SceneManager.LoadScene(sceneName);
+        ScreenTransition.LoadScene(sceneName);
     }
 
     public void OnSelectButtonClickStage1()

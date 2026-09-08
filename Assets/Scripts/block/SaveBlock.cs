@@ -1,3 +1,4 @@
+using DG.Tweening;
 using UnityEngine;
 
 /// <summary>
@@ -19,6 +20,8 @@ public sealed class SaveBlock : MonoBehaviour,
     [SerializeField] private BigUiBlock bigUiBlock;
     [Range(0f, 1f)] [SerializeField] private float ghostOpacity = 0.4f;
     [Min(0f)] [SerializeField] private float ghostOverlapHideDistance = 0.05f;
+    [Min(1f)] [SerializeField] private float ghostAppearScale = 1.75f;
+    [Min(0f)] [SerializeField] private float ghostAppearDuration = 0.5f;
 
     private bool hasSavedState;
     private Vector2 savedPosition;
@@ -30,6 +33,9 @@ public sealed class SaveBlock : MonoBehaviour,
     private bool savedFlipY;
     private Player.AnimationSnapshot savedAnimation;
     private GameObject playerGhost;
+    private Tween ghostScaleTween;
+    private Vector3 ghostDefaultScale;
+    private bool isGhostAppearAnimationPlaying;
     private int lastOperationFrame = -1;
 
     public bool IsOperating => false;
@@ -100,6 +106,11 @@ public sealed class SaveBlock : MonoBehaviour,
 
     public void BeginOperation()
     {
+        if (!BlockInputGuard.AllowsInput(this))
+        {
+            return;
+        }
+
         if (lastOperationFrame == Time.frameCount)
         {
             return;
@@ -115,10 +126,12 @@ public sealed class SaveBlock : MonoBehaviour,
         {
             LoadPlayerState();
             ClearSavedState();
+            AudioManager.Instance?.PlayLoadSound();
         }
         else
         {
             SavePlayerState();
+            AudioManager.Instance?.PlaySaveSound();
         }
 
         ApplyBlockSprite();
@@ -215,6 +228,7 @@ public sealed class SaveBlock : MonoBehaviour,
         ghostTransform.localScale = playerRenderer != null
             ? playerRenderer.transform.lossyScale
             : playerBody.transform.lossyScale;
+        ghostDefaultScale = ghostTransform.localScale;
 
         SpriteRenderer ghostRenderer = playerGhost.AddComponent<SpriteRenderer>();
         ghostRenderer.sprite = savedPlayerSprite != null
@@ -240,6 +254,7 @@ public sealed class SaveBlock : MonoBehaviour,
             ghostRenderer.maskInteraction = playerRenderer.maskInteraction;
         }
         playerGhost.SetActive(true);
+        PlayGhostAppearAnimation();
         EnsureGhostBehindPlayer();
     }
 
@@ -257,22 +272,52 @@ public sealed class SaveBlock : MonoBehaviour,
         }
 
         ghostRenderer.sortingLayerID = playerRenderer.sortingLayerID;
-        ghostRenderer.sortingOrder = Mathf.Max(
-            short.MinValue,
-            playerRenderer.sortingOrder - 100);
+        // Share the world sorting order so the ghost stays in front of the locked
+        // goal. The Z offset below keeps it behind the actual player.
+        ghostRenderer.sortingOrder = playerRenderer.sortingOrder;
 
         // Idle0/Idle1などで輪郭や透明部分が異なる場合、背面の残像が透けて
         // 手前にあるように見えるため、Playerが保存地点に重なる間は隠します。
         bool playerOverlapsSavedPosition = playerBody != null &&
             ((Vector2)playerBody.position - savedPosition).sqrMagnitude <=
             ghostOverlapHideDistance * ghostOverlapHideDistance;
-        ghostRenderer.enabled = !playerOverlapsSavedPosition;
+        // 保存直後の拡大演出中は、Playerと重なっていても残像を表示します。
+        ghostRenderer.enabled = isGhostAppearAnimationPlaying || !playerOverlapsSavedPosition;
 
         // 同一Sorting Layerを使用する場合にもPlayerが確実に手前になるよう、
         // 通常の2Dカメラから遠い側へ残像を配置します。
         Vector3 ghostPosition = playerGhost.transform.position;
         ghostPosition.z = playerRenderer.transform.position.z + 0.1f;
         playerGhost.transform.position = ghostPosition;
+    }
+
+    private void PlayGhostAppearAnimation()
+    {
+        if (playerGhost == null)
+        {
+            return;
+        }
+
+        ghostScaleTween?.Kill();
+
+        Transform ghostTransform = playerGhost.transform;
+        ghostTransform.localScale = ghostDefaultScale * ghostAppearScale;
+        if (ghostAppearDuration <= 0f)
+        {
+            ghostTransform.localScale = ghostDefaultScale;
+            isGhostAppearAnimationPlaying = false;
+            return;
+        }
+
+        isGhostAppearAnimationPlaying = true;
+        ghostScaleTween = ghostTransform
+            .DOScale(ghostDefaultScale, ghostAppearDuration)
+            .SetEase(Ease.OutCubic)
+            .OnComplete(() =>
+            {
+                isGhostAppearAnimationPlaying = false;
+                EnsureGhostBehindPlayer();
+            });
     }
 
     private void ResolvePlayerVisualReferences()
@@ -309,6 +354,10 @@ public sealed class SaveBlock : MonoBehaviour,
 
     private void DestroyPlayerGhost()
     {
+        ghostScaleTween?.Kill();
+        ghostScaleTween = null;
+        isGhostAppearAnimationPlaying = false;
+
         if (playerGhost != null)
         {
             playerGhost.SetActive(false);

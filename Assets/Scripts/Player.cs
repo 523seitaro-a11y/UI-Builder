@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using DG.Tweening;
 using UnityEngine;
 
 [DisallowMultipleComponent]
@@ -55,6 +57,11 @@ public class Player : MonoBehaviour
     [SerializeField] private StageManager stageManager;
     [SerializeField] private BlockManager blockManager;
 
+    [Header("停止演出")]
+    [SerializeField] private PlayerStopSpriteLibrary stopSpriteLibrary;
+    [Min(1f)] [SerializeField] private float stopAppearScale = 1.75f;
+    [Min(0f)] [SerializeField] private float stopAppearDuration = 0.5f;
+
     [Header("Idleスプライト")]
     [SerializeField] private Sprite idle0;
     [SerializeField] private Sprite idle1;
@@ -99,6 +106,22 @@ public class Player : MonoBehaviour
     private float stateTimer;
     private bool wasGrounded;
     private bool hasStateSample;
+    private readonly List<Vector2> colliderPath = new List<Vector2>();
+    private Sprite colliderSprite;
+    private bool colliderFlipX;
+    private bool colliderFlipY;
+    private float colliderVerticalScale;
+    // Unity 6's current 2D solver leaves 0.015 world units between resting shapes.
+    private const float FootContactInset = 0.015f;
+    private GameObject stopVisualObject;
+    private SpriteRenderer stopVisualRenderer;
+    private Tween stopScaleTween;
+    private bool stopOriginalRendererEnabled;
+    private bool wasStopped;
+    // The feet occupy the bottom 13% of the standing sprite.
+    private const float ColliderBaseHeightRatio = 0.13f;
+    // Keep the collision shape slightly inside the sprite so side contacts feel less strict.
+    private const float ColliderHorizontalScale = 0.8f;
 
     private void Awake()
     {
@@ -107,6 +130,7 @@ public class Player : MonoBehaviour
         playerRenderer ??= GetComponent<SpriteRenderer>();
         stageManager ??= FindFirstObjectByType<StageManager>();
         blockManager ??= FindFirstObjectByType<BlockManager>();
+        stopSpriteLibrary ??= Resources.Load<PlayerStopSpriteLibrary>("PlayerStopSpriteLibrary");
         ResetToIdle();
     }
 
@@ -144,9 +168,252 @@ public class Player : MonoBehaviour
             playerRenderer.flipX = snapshot.FlipX;
             playerRenderer.flipY = snapshot.FlipY;
         }
+        SyncSpriteCollider();
+    }
+
+    // Keep the collision shape aligned when facing or scale changes.
+    private void LateUpdate() => SyncSpriteCollider();
+
+    private void SyncSpriteCollider()
+    {
+        playerCollider ??= GetComponent<Collider2D>();
+        if (playerCollider is not PolygonCollider2D polygon || playerRenderer == null)
+        {
+            return;
+        }
+
+        // Animation frames have different feet. Changing the physical footprint can
+        // remove support at a ledge, then restore it with the landing frame forever.
+        // Use the same standing pentagon throughout movement, jumping, and landing.
+        Sprite sprite = idle0 != null ? idle0 : playerRenderer.sprite;
+        bool flipX = playerRenderer.flipX;
+        bool flipY = playerRenderer.flipY;
+        float verticalScale = transform.lossyScale.y;
+        if (sprite == colliderSprite && flipX == colliderFlipX && flipY == colliderFlipY &&
+            Mathf.Approximately(verticalScale, colliderVerticalScale))
+        {
+            return;
+        }
+
+        // Physics shape points already include the sprite pivot and pixels-per-unit.
+        // Transform scale applies to both the sprite and collider automatically.
+        polygon.offset = Vector2.zero;
+        int shapeCount = sprite != null ? sprite.GetPhysicsShapeCount() : 0;
+        polygon.pathCount = shapeCount > 0 ? 1 : 0;
+        float left = float.PositiveInfinity;
+        float right = float.NegativeInfinity;
+        float bottom = float.PositiveInfinity;
+        float top = float.NegativeInfinity;
+        for (int path = 0; path < shapeCount; path++)
+        {
+            sprite.GetPhysicsShape(path, colliderPath);
+            foreach (Vector2 point in colliderPath)
+            {
+                left = Mathf.Min(left, point.x);
+                right = Mathf.Max(right, point.x);
+                bottom = Mathf.Min(bottom, point.y);
+                top = Mathf.Max(top, point.y);
+            }
+        }
+        float height = top - bottom;
+        float inset = Mathf.Min(FootContactInset / Mathf.Max(Mathf.Abs(verticalScale), 0.0001f),
+            Mathf.Max(0f, height * 0.5f));
+        if (shapeCount > 0)
+        {
+            // Triangle above, full-width rectangle below: no separate feet or notch.
+            float shoulderY = bottom + height * ColliderBaseHeightRatio;
+            float centerX = (left + right) * 0.5f;
+            float halfWidth = (right - left) * 0.5f * ColliderHorizontalScale;
+            float colliderLeft = centerX - halfWidth;
+            float colliderRight = centerX + halfWidth;
+            colliderPath.Clear();
+            colliderPath.Add(new Vector2(centerX, top));
+            colliderPath.Add(new Vector2(colliderRight, shoulderY));
+            colliderPath.Add(new Vector2(colliderRight, bottom));
+            colliderPath.Add(new Vector2(colliderLeft, bottom));
+            colliderPath.Add(new Vector2(colliderLeft, shoulderY));
+            if (flipY)
+            {
+                float previousBottom = bottom;
+                bottom = -top;
+                top = -previousBottom;
+            }
+            for (int point = 0; point < colliderPath.Count; point++)
+            {
+                Vector2 position = colliderPath[point];
+                position.x *= flipX ? -1f : 1f;
+                position.y *= flipY ? -1f : 1f;
+                // Account for the solver's contact gap at the feet without moving the
+                // sprite, Rigidbody, or head boundary. Keep the inset constant in world space.
+                if (height > Mathf.Epsilon)
+                {
+                    position.y += verticalScale >= 0f
+                        ? inset * (top - position.y) / height
+                        : -inset * (position.y - bottom) / height;
+                }
+                colliderPath[point] = position;
+            }
+            polygon.SetPath(0, colliderPath);
+        }
+
+        colliderSprite = sprite;
+        colliderFlipX = flipX;
+        colliderFlipY = flipY;
+        colliderVerticalScale = verticalScale;
     }
 
     private void Update()
+    {
+        UpdateStopVisual();
+        UpdateAnimation(Time.deltaTime);
+    }
+
+    private void UpdateStopVisual()
+    {
+        bool isStopped = blockManager != null && blockManager.IsPlayerStopped;
+        SetStoppedVisual(isStopped);
+    }
+
+    public void SetStoppedVisual(bool isStopped)
+    {
+        if (isStopped == wasStopped)
+        {
+            return;
+        }
+
+        wasStopped = isStopped;
+        if (isStopped)
+        {
+            PlayStopVisual();
+        }
+        else
+        {
+            RestoreStopVisual();
+        }
+    }
+
+    private void PlayStopVisual()
+    {
+        if (playerRenderer == null)
+        {
+            return;
+        }
+
+        stopScaleTween?.Kill();
+        stopVisualObject = new GameObject("Stopped Player Visual");
+        stopVisualObject.layer = playerRenderer.gameObject.layer;
+        Transform visualTransform = stopVisualObject.transform;
+        visualTransform.SetParent(playerRenderer.transform, false);
+        stopVisualRenderer = stopVisualObject.AddComponent<SpriteRenderer>();
+        CopyStopRenderer(playerRenderer, stopVisualRenderer);
+        stopVisualRenderer.sprite = GetStoppedSprite(playerRenderer.sprite);
+
+        stopOriginalRendererEnabled = playerRenderer.enabled;
+        playerRenderer.enabled = false;
+        Vector2 spriteCenter = playerRenderer.sprite != null
+            ? playerRenderer.sprite.bounds.center
+            : Vector2.zero;
+        ApplyStopVisualScale(visualTransform, spriteCenter, stopAppearScale);
+
+        if (stopAppearDuration <= 0f)
+        {
+            ApplyStopVisualScale(visualTransform, spriteCenter, 1f);
+            return;
+        }
+
+        float scale = stopAppearScale;
+        stopScaleTween = DOTween.To(
+                () => scale,
+                value =>
+                {
+                    scale = value;
+                    if (visualTransform != null)
+                    {
+                        ApplyStopVisualScale(visualTransform, spriteCenter, value);
+                    }
+                },
+                1f,
+                stopAppearDuration)
+            .SetEase(Ease.OutCubic);
+    }
+
+    private Sprite GetStoppedSprite(Sprite currentSprite)
+    {
+        if (stopSpriteLibrary == null || currentSprite == null)
+        {
+            return currentSprite;
+        }
+
+        if (currentSprite == idle0) return stopSpriteLibrary.idle0;
+        if (currentSprite == idle1) return stopSpriteLibrary.idle1;
+        if (currentSprite == run0) return stopSpriteLibrary.run0;
+        if (currentSprite == run1) return stopSpriteLibrary.run1;
+        if (currentSprite == run2) return stopSpriteLibrary.run2;
+        if (currentSprite == run3) return stopSpriteLibrary.run3;
+        if (currentSprite == jump0) return stopSpriteLibrary.jump0;
+        if (currentSprite == jump1) return stopSpriteLibrary.jump1;
+        if (currentSprite == jump2) return stopSpriteLibrary.jump2;
+        if (currentSprite == jump3) return stopSpriteLibrary.jump3;
+        return currentSprite;
+    }
+
+    private static void CopyStopRenderer(
+        SpriteRenderer source,
+        SpriteRenderer destination)
+    {
+        destination.sprite = source.sprite;
+        destination.sharedMaterial = source.sharedMaterial;
+        destination.color = source.color;
+        destination.flipX = source.flipX;
+        destination.flipY = source.flipY;
+        destination.drawMode = source.drawMode;
+        destination.size = source.size;
+        destination.maskInteraction = source.maskInteraction;
+        destination.sortingLayerID = source.sortingLayerID;
+        destination.sortingOrder = source.sortingOrder;
+    }
+
+    private static void ApplyStopVisualScale(
+        Transform visual,
+        Vector2 spriteCenter,
+        float scale)
+    {
+        visual.localScale = new Vector3(scale, scale, 1f);
+        visual.localPosition = new Vector3(
+            spriteCenter.x * (1f - scale),
+            spriteCenter.y * (1f - scale),
+            0f);
+    }
+
+    private void RestoreStopVisual()
+    {
+        stopScaleTween?.Kill();
+        stopScaleTween = null;
+        if (playerRenderer != null)
+        {
+            playerRenderer.enabled = stopOriginalRendererEnabled;
+        }
+
+        if (stopVisualRenderer != null)
+        {
+            stopVisualRenderer.enabled = false;
+        }
+
+        if (stopVisualObject != null)
+        {
+            Destroy(stopVisualObject);
+        }
+
+        stopVisualObject = null;
+        stopVisualRenderer = null;
+    }
+
+    private void OnDestroy()
+    {
+        RestoreStopVisual();
+    }
+
+    private void UpdateAnimation(float deltaTime)
     {
         if (!CanAnimate())
         {
@@ -168,11 +435,13 @@ public class Player : MonoBehaviour
         {
             if (wasGrounded)
             {
-                EnterState(AnimationState.JumpStart);
+                // Walking off an edge starts falling immediately; only upward motion
+                // should display the jump-start frame.
+                EnterState(GetAirMovementState(includeJumpStart: true));
             }
             else if (animationState == AnimationState.JumpStart)
             {
-                stateTimer += Time.deltaTime;
+                stateTimer += deltaTime;
                 if (stateTimer >= jumpStartDuration)
                 {
                     EnterState(GetAirMovementState(includeJumpStart: false));
@@ -195,7 +464,7 @@ public class Player : MonoBehaviour
         }
         else if (animationState == AnimationState.Landing)
         {
-            stateTimer += Time.deltaTime;
+            stateTimer += deltaTime;
             if (stateTimer >= landingDuration)
             {
                 EnterState(GetGroundedMovementState());
@@ -211,7 +480,7 @@ public class Player : MonoBehaviour
         }
 
         wasGrounded = isGrounded;
-        UpdateCurrentAnimation(Time.deltaTime);
+        UpdateCurrentAnimation(deltaTime);
     }
 
     private bool CanAnimate() =>
@@ -250,7 +519,7 @@ public class Player : MonoBehaviour
             return AnimationState.JumpStart;
         }
 
-        return playerBody.linearVelocity.y >= -apexVelocityThreshold
+        return playerBody.linearVelocity.y > apexVelocityThreshold
             ? AnimationState.Rising
             : AnimationState.Falling;
     }
@@ -325,6 +594,7 @@ public class Player : MonoBehaviour
         {
             playerRenderer.sprite = sprite;
         }
+        SyncSpriteCollider();
     }
 
     private bool IsGrounded()
@@ -361,7 +631,8 @@ public class Player : MonoBehaviour
         {
             if (groundHits[i].collider != null &&
                 groundHits[i].collider != playerCollider &&
-                !groundHits[i].collider.isTrigger)
+                !groundHits[i].collider.isTrigger &&
+                groundHits[i].normal.y >= minimumGroundNormalY)
             {
                 return true;
             }
@@ -391,6 +662,7 @@ public class Player : MonoBehaviour
                 playerRenderer.sprite = idle0;
             }
         }
+        SyncSpriteCollider();
     }
 
     private void OnValidate()

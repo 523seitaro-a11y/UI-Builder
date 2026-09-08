@@ -168,6 +168,11 @@ public sealed class UiSizeBlock : MonoBehaviour,
 
     private void HandlePointer(Vector2 screenPosition)
     {
+        if (!BlockInputGuard.AllowsInput(this))
+        {
+            return;
+        }
+
         if (!isPlayMode || isAnimating)
         {
             return;
@@ -194,6 +199,7 @@ public sealed class UiSizeBlock : MonoBehaviour,
                 {
                     SetSelectedMode(mode);
                 }
+                AudioManager.Instance?.PlaySizeSelectionSound();
                 return;
             }
         }
@@ -213,6 +219,7 @@ public sealed class UiSizeBlock : MonoBehaviour,
 
     private void ApplyOpenState()
     {
+        AudioManager.Instance?.PlaySizeOpenSound();
         isOpen = true;
         isAnimating = true;
         isCarryingPlayer = IsPlayerStandingOnSize();
@@ -252,6 +259,7 @@ public sealed class UiSizeBlock : MonoBehaviour,
 
     private void StartCloseAnimation()
     {
+        AudioManager.Instance?.PlaySizeCloseSound();
         isOpen = false;
         isAnimating = true;
         SetOptionCollidersEnabled(false);

@@ -26,6 +26,11 @@ public sealed class RetryBlock : MonoBehaviour, BlockManager.IBlockOperationStat
 
     public void BeginOperation()
     {
+        if (!BlockInputGuard.AllowsInput(this))
+        {
+            return;
+        }
+
         stageManager?.ReturnToBuildMode();
     }
 

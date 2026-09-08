@@ -132,6 +132,11 @@ public sealed class UpwardDropdownPlatform : MonoBehaviour,
 
     private void HandlePointer(Vector2 screenPosition)
     {
+        if (!BlockInputGuard.AllowsInput(this))
+        {
+            return;
+        }
+
         if (!isPlayMode)
         {
             return;

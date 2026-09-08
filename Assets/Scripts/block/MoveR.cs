@@ -11,6 +11,7 @@ public class MoveR : MonoBehaviour, BlockManager.IBlockOperationState
     [Header("右移動の設定")]
     [Tooltip("右へ動かすプレイヤーの Rigidbody2D を指定します。")]
     [SerializeField] private Rigidbody2D playerBody;
+    [SerializeField] private BlockManager blockManager;
 
     [Tooltip("長押し中の右方向への移動速度です。値を大きくすると速く進みます。")]
     [SerializeField] private float moveSpeed = 3f;
@@ -29,6 +30,8 @@ public class MoveR : MonoBehaviour, BlockManager.IBlockOperationState
 
     private void Awake()
     {
+        blockManager ??= FindFirstObjectByType<BlockManager>();
+
         // Inspectorで未設定の場合は、名前が「Player」のオブジェクトから自動取得します。
         if (playerBody == null)
         {
@@ -50,7 +53,12 @@ public class MoveR : MonoBehaviour, BlockManager.IBlockOperationState
 
     public void BeginOperation()
     {
-        if (playerBody == null)
+        if (!BlockInputGuard.AllowsInput(this))
+        {
+            return;
+        }
+
+        if (playerBody == null || (blockManager != null && blockManager.IsPlayerStopped))
         {
             Debug.LogWarning("MoveR: プレイヤーの Rigidbody2D が設定されていません。", this);
             return;
@@ -69,6 +77,13 @@ public class MoveR : MonoBehaviour, BlockManager.IBlockOperationState
 
     private void FixedUpdate()
     {
+        if (blockManager != null && blockManager.IsPlayerStopped)
+        {
+            isPressed = false;
+            StopHorizontalMovement();
+            return;
+        }
+
         if (!isPressed || playerBody == null)
         {
             return;

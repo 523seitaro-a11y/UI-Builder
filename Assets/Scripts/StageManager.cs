@@ -144,6 +144,9 @@ public class StageManager : MonoBehaviour
     [Tooltip("画面下から表示するResultBGです。")]
     [SerializeField] private RectTransform resultBackground;
 
+    private Button resultStageSelectButton;
+    private Button resultTitleButton;
+
     [Tooltip("ゴールに触れてからResultBGを表示し始めるまでの待機時間（秒）です。")]
     [Min(0f)]
     [SerializeField] private float resultDisplayDelay = 0.5f;
@@ -259,6 +262,8 @@ public class StageManager : MonoBehaviour
     public Vector2Int KeyCell => keyCell;
     public StageMode CurrentMode { get; private set; }
     public bool IsPaused { get; private set; }
+    public bool IsPlayerDying { get; private set; }
+    public RectTransform TransitionOverlay => transitionOverlay;
 
     private Tweener transitionTween;
     private Tweener deathIrisTween;
@@ -315,6 +320,8 @@ public class StageManager : MonoBehaviour
         FindMissingReferences();
         CacheRetryTilemapColliders();
         ApplyStageInformation();
+        ConfigureResultBackground();
+        ConfigurePauseTypography();
         ConfigureStageNavigation();
         ConfigurePlayerLandingPhysics();
         CacheDeathPresentation();
@@ -341,7 +348,7 @@ public class StageManager : MonoBehaviour
 
     private void FixedUpdate()
     {
-        if (CurrentMode == StageMode.Play && !IsPaused && IsPlayerTouchingKey())
+        if (CurrentMode == StageMode.Play && !IsPaused && !IsPlayerDying && IsPlayerTouchingKey())
         {
             CollectKey();
         }
@@ -387,7 +394,7 @@ public class StageManager : MonoBehaviour
         }
 
         Time.timeScale = 1f;
-        SceneManager.LoadScene(nextSceneName);
+        ScreenTransition.LoadScene(nextSceneName);
     }
 
     private void CacheRetryTilemapColliders()
@@ -756,11 +763,187 @@ public class StageManager : MonoBehaviour
     }
 
     /// <summary>
+    /// 全ステージのResultBG下部をStage1と同じ2ボタン構成へ揃えます。
+    /// 最終ステージなどのNextButton有無は各シーンの設定を維持します。
+    /// </summary>
+    private void ConfigureResultBackground()
+    {
+        if (resultBackground == null)
+        {
+            return;
+        }
+
+        resultStageSelectButton = FindResultButton("SelectBackButton");
+        if (resultStageSelectButton == null)
+        {
+            return;
+        }
+
+        TMP_Text fontTemplate = FindExtraBoldTextTemplate();
+        ApplyResultNavigationButtonStyle(
+            resultStageSelectButton,
+            new Vector2(300f, -370f),
+            "STAGE SELECT",
+            fontTemplate);
+        resultStageSelectButton.onClick = new Button.ButtonClickedEvent();
+        resultStageSelectButton.onClick.AddListener(LoadStageSelectScene);
+
+        resultTitleButton = FindResultButton("TitleBackButton");
+        if (resultTitleButton == null)
+        {
+            GameObject titleButtonObject = Instantiate(
+                resultStageSelectButton.gameObject,
+                resultBackground,
+                false);
+            titleButtonObject.name = "TitleBackButton";
+            resultTitleButton = titleButtonObject.GetComponent<Button>();
+        }
+
+        if (resultTitleButton == null)
+        {
+            return;
+        }
+
+        ApplyResultNavigationButtonStyle(
+            resultTitleButton,
+            new Vector2(-300f, -370f),
+            "BACK TO TITLE",
+            fontTemplate);
+        resultTitleButton.onClick = new Button.ButtonClickedEvent();
+        resultTitleButton.onClick.AddListener(LoadTitleScene);
+    }
+
+    private Button FindResultButton(string objectName)
+    {
+        Transform child = resultBackground.Find(objectName);
+        return child != null ? child.GetComponent<Button>() : null;
+    }
+
+    private static TMP_Text FindExtraBoldTextTemplate()
+        => FindTextTemplateByFontName("LINESeedJP-ExtraBold SDF");
+
+    private static TMP_Text FindTextTemplateByFontName(string fontName)
+    {
+        foreach (TMP_Text text in FindObjectsByType<TMP_Text>(
+                     FindObjectsInactive.Include,
+                     FindObjectsSortMode.None))
+        {
+            if (text.font != null && text.font.name == fontName)
+            {
+                return text;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>PauseBG内の文字設定をStage1の値へ統一します。</summary>
+    private void ConfigurePauseTypography()
+    {
+        if (pauseBackground == null)
+        {
+            return;
+        }
+
+        TMP_Text boldTemplate = FindTextTemplateByFontName("LINESeedJP-Bold SDF");
+        TMP_Text extraBoldTemplate = FindExtraBoldTextTemplate();
+
+        ApplyPauseTypography("Image/Stage", boldTemplate, 4f, new Color32(61, 61, 61, 255));
+        TMP_Text pauseHeading = ApplyPauseTypography(
+            "Pause",
+            boldTemplate,
+            10f,
+            Color.white);
+        if (pauseHeading != null)
+        {
+            pauseHeading.text = "PAUSE";
+        }
+
+        ApplyPauseTypography(
+            "SelectBackButton/Text (TMP)",
+            extraBoldTemplate,
+            40f,
+            new Color32(60, 60, 60, 255));
+        ApplyPauseTypography(
+            "TitleBackButton/Text (TMP)",
+            extraBoldTemplate,
+            40f,
+            new Color32(60, 60, 60, 255));
+        ApplyPauseTypography("BGMBar/BGM", extraBoldTemplate, 50f, Color.white);
+        ApplyPauseTypography("SEBar/SE", extraBoldTemplate, 50f, Color.white);
+    }
+
+    private TMP_Text ApplyPauseTypography(
+        string relativePath,
+        TMP_Text fontTemplate,
+        float fontSize,
+        Color color)
+    {
+        Transform target = pauseBackground.Find(relativePath);
+        TMP_Text text = target != null ? target.GetComponent<TMP_Text>() : null;
+        if (text == null)
+        {
+            return null;
+        }
+
+        if (fontTemplate != null)
+        {
+            text.font = fontTemplate.font;
+            text.fontSharedMaterial = fontTemplate.fontSharedMaterial;
+        }
+
+        text.enableAutoSizing = false;
+        text.fontSize = fontSize;
+        text.fontWeight = FontWeight.Regular;
+        text.fontStyle = FontStyles.Normal;
+        text.color = color;
+        text.alignment = TextAlignmentOptions.Center;
+        return text;
+    }
+
+    private static void ApplyResultNavigationButtonStyle(
+        Button button,
+        Vector2 anchoredPosition,
+        string label,
+        TMP_Text fontTemplate)
+    {
+        if (button.transform is RectTransform rectTransform)
+        {
+            rectTransform.anchorMin = new Vector2(0.5f, 0.5f);
+            rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
+            rectTransform.pivot = new Vector2(0.5f, 0.5f);
+            rectTransform.anchoredPosition = anchoredPosition;
+            rectTransform.sizeDelta = new Vector2(500f, 120f);
+            rectTransform.localScale = Vector3.one;
+        }
+
+        TMP_Text buttonText = button.GetComponentInChildren<TMP_Text>(true);
+        if (buttonText == null)
+        {
+            return;
+        }
+
+        buttonText.text = label;
+        buttonText.fontSize = 40f;
+        buttonText.color = new Color32(50, 50, 50, 255);
+        buttonText.alignment = TextAlignmentOptions.Center;
+        if (fontTemplate != null)
+        {
+            buttonText.font = fontTemplate.font;
+            buttonText.fontSharedMaterial = fontTemplate.fontSharedMaterial;
+        }
+    }
+
+    private static void LoadStageSelectScene() => ScreenTransition.LoadScene("StageSelect");
+
+    private static void LoadTitleScene() => ScreenTransition.LoadScene("Title");
+
+    /// <summary>
     /// 現在の画面を停止してPauseBGを表示します。
     /// </summary>
     public void ShowPause()
     {
-        if (IsPaused ||
+        if (IsPaused || IsPlayerDying ||
             CurrentMode == StageMode.GoalReached ||
             CurrentMode == StageMode.Result ||
             isRetryTransitionPlaying ||
@@ -923,7 +1106,7 @@ public class StageManager : MonoBehaviour
 
     public void RequestPlayerRetry()
     {
-        if (CurrentMode != StageMode.Play ||
+        if (CurrentMode != StageMode.Play || IsPlayerDying ||
             IsPaused ||
             isRetryTransitionPlaying ||
             isPlayerRetryRequested)
@@ -940,21 +1123,22 @@ public class StageManager : MonoBehaviour
     /// </summary>
     private async UniTask<bool> PlayDeathAndRestartAsync(CancellationToken token)
     {
-        AudioManager.Instance?.PlayDeathSound();
-        StopPlayerForDeath();
-        blockManager?.ResetSavedPlayerStates();
-        SetPlayerSprite(playerDeadSprite);
-        PlayDeathPopAnimation();
-
-        if (!PrepareDeathIris(GetPlayerIrisCenter(), out float closeStartRadius))
-        {
-            RetryPlayer();
-            RestorePlayerAfterDeath();
-            return false;
-        }
-
+        IsPlayerDying = true;
         try
         {
+            blockManager?.CancelAllPlacedBlockOperations();
+            AudioManager.Instance?.PlayDeathSound();
+            StopPlayerForDeath();
+            blockManager?.ResetSavedPlayerStates();
+            SetPlayerSprite(playerDeadSprite);
+            PlayDeathPopAnimation();
+
+            if (!PrepareDeathIris(GetPlayerIrisCenter(), out float closeStartRadius))
+            {
+                RetryPlayer();
+                return false;
+            }
+
             SetDeathIrisRadius(closeStartRadius);
             if (await TweenDeathIrisRadiusAsync(
                     ClosedDeathIrisRadius,
@@ -997,6 +1181,7 @@ public class StageManager : MonoBehaviour
             deathIrisTween = null;
             RestoreTransitionAfterDeath();
             RestorePlayerAfterDeath();
+            IsPlayerDying = false;
         }
     }
 
@@ -1387,7 +1572,7 @@ public class StageManager : MonoBehaviour
     /// </summary>
     public void ReturnToBuildMode()
     {
-        if (IsPaused ||
+        if (IsPaused || IsPlayerDying ||
             CurrentMode != StageMode.Play ||
             isRetryTransitionPlaying ||
             (transitionOverlay != null && transitionOverlay.gameObject.activeSelf))
@@ -2385,6 +2570,8 @@ public class StageManager : MonoBehaviour
 
     private void OnDestroy()
     {
+        resultStageSelectButton?.onClick.RemoveListener(LoadStageSelectScene);
+        resultTitleButton?.onClick.RemoveListener(LoadTitleScene);
         pauseButton?.onClick.RemoveListener(ShowPause);
         pauseBackButton?.onClick.RemoveListener(HidePause);
         nextStageButton?.onClick.RemoveListener(LoadNextStage);

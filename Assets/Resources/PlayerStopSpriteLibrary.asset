@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d65bf9c6b2dc4e559615425172a6b42a, type: 3}
+  m_Name: PlayerStopSpriteLibrary
+  m_EditorClassIdentifier: 
+  idle0: {fileID: 3686119787166017264, guid: eb32e565ceb952c4da408545630c5f75, type: 3}
+  idle1: {fileID: -7762660204665986802, guid: a9f63c18fe7f383419ddb518d7e0e589, type: 3}
+  run0: {fileID: 331818053655409794, guid: 915bf976489026c46b0f2964aff4be42, type: 3}
+  run1: {fileID: 925278949654833674, guid: 7aa9c18338a964a4890656c2c024538d, type: 3}
+  run2: {fileID: 4800877765052786143, guid: 8de51926c91133647bdec91b3e366adb, type: 3}
+  run3: {fileID: 2486337491638467788, guid: 5c117a9a48562834a803e42275752906, type: 3}
+  jump0: {fileID: -4440646128930649372, guid: 97d3791d80e562a40ad842f3de0a72ed, type: 3}
+  jump1: {fileID: 5785868172639812020, guid: 77ef55a3d0d7247499a858e98ddf1b66, type: 3}
+  jump2: {fileID: -4935954375613820705, guid: 69453804a4600b4419a1f5402cc42dc5, type: 3}
+  jump3: {fileID: 8209770637456116242, guid: 90b7a5dc44d55b84f9d737864be80a1c, type: 3}

@@ -5,12 +5,15 @@ using UnityEngine;
 /// </summary>
 public sealed class PauseBlock : MonoBehaviour,
     BlockManager.IBlockOperationState,
-    BlockManager.IPlayModeBlockState
+    BlockManager.IPlayModeBlockState,
+    BlockManager.IBlockClickState
 {
     [SerializeField] private BlockManager blockManager;
     [SerializeField] private SpriteRenderer targetRenderer;
     [SerializeField] private Sprite stopSprite;
     [SerializeField] private Sprite playSprite;
+
+    private int lastOperationFrame = -1;
 
     public bool IsOperating => false;
 
@@ -49,16 +52,36 @@ public sealed class PauseBlock : MonoBehaviour,
 
     private void Update() => ApplySprite();
 
-    private void OnMouseDown() => BeginOperation();
+    public void Click() => BeginOperation();
 
     public void BeginOperation()
     {
-        if (blockManager == null)
+        if (!BlockInputGuard.AllowsInput(this))
         {
             return;
         }
 
-        blockManager.SetPlayerStopped(!blockManager.IsPlayerStopped);
+        if (!isActiveAndEnabled || blockManager == null || blockManager.IsBuildMode)
+        {
+            return;
+        }
+
+        if (lastOperationFrame == Time.frameCount)
+        {
+            return;
+        }
+
+        lastOperationFrame = Time.frameCount;
+        bool shouldStop = !blockManager.IsPlayerStopped;
+        blockManager.SetPlayerStopped(shouldStop);
+        if (shouldStop)
+        {
+            AudioManager.Instance?.PlayStopSound();
+        }
+        else
+        {
+            AudioManager.Instance?.PlayStopReleaseSound();
+        }
         ApplySprite();
     }
 
@@ -78,7 +101,8 @@ public sealed class PauseBlock : MonoBehaviour,
             return;
         }
 
-        bool isStopped = blockManager != null && blockManager.IsPlayerStopped;
+        bool isStopped = blockManager != null && !blockManager.IsBuildMode &&
+                         blockManager.IsPlayerStopped;
         Sprite sprite = isStopped ? playSprite : stopSprite;
         if (sprite != null && targetRenderer.sprite != sprite)
         {

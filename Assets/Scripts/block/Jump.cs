@@ -11,6 +11,7 @@ public class Jump : MonoBehaviour, BlockManager.IBlockOperationState
     [Header("ジャンプの設定")]
     [Tooltip("ジャンプさせるプレイヤーの Rigidbody2D を指定します。")]
     [SerializeField] private Rigidbody2D playerBody;
+    [SerializeField] private BlockManager blockManager;
 
     [Tooltip("1回クリックしたときに上方向へ加える力です。値を大きくすると高くジャンプします。")]
     [SerializeField] private float jumpPower = 5f;
@@ -33,6 +34,8 @@ public class Jump : MonoBehaviour, BlockManager.IBlockOperationState
 
     private void Awake()
     {
+        blockManager ??= FindFirstObjectByType<BlockManager>();
+
         // Inspectorで未設定の場合は、名前が「Player」のオブジェクトから自動取得します。
         if (playerBody == null)
         {
@@ -54,7 +57,12 @@ public class Jump : MonoBehaviour, BlockManager.IBlockOperationState
 
     public void BeginOperation()
     {
-        if (playerBody == null)
+        if (!BlockInputGuard.AllowsInput(this))
+        {
+            return;
+        }
+
+        if (playerBody == null || (blockManager != null && blockManager.IsPlayerStopped))
         {
             Debug.LogWarning("Jump: プレイヤーの Rigidbody2D が設定されていません。", this);
             return;

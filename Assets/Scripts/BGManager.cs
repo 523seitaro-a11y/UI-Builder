@@ -42,7 +42,7 @@ public class BGManager : MonoBehaviour
     [Tooltip("正方形を生成する間隔の最小値と最大値（秒）です。")]
     [SerializeField] private Vector2 spawnIntervalRange = new Vector2(1f, 2f);
 
-    [Tooltip("正方形の一辺の長さの最小値と最大値（Canvas単位）です。")]
+    [Tooltip("正方形の一辺の長さの最小値と最大値（Canvas単位）です。スプライト指定時は長辺の長さになります。")]
     [SerializeField] private Vector2 squareSizeRange = new Vector2(100f, 200f);
 
     [Header("移動設定")]
@@ -57,7 +57,10 @@ public class BGManager : MonoBehaviour
     [SerializeField] private bool useUnscaledTime = false;
 
     [Header("見た目")]
-    [Tooltip("正方形の色です。")]
+    [Tooltip("背景に流すスプライトです。未設定なら従来の正方形を表示します。縦横比を保ってサイズに合わせます。")]
+    [SerializeField] private Sprite backgroundSprite;
+
+    [Tooltip("正方形・スプライトに掛け合わせる色です。元の画像の色を使う場合は白にします。")]
     [SerializeField] private Color squareColor = new Color(0.9622642f, 0.9622642f, 0.9622642f, 1f);
 
     [Tooltip("正方形ごとの回転角度の最小値と最大値です。0, 0なら回転しません。")]
@@ -206,10 +209,15 @@ public class BGManager : MonoBehaviour
             0f,
             0f,
             Random.Range(Min(rotationRange), Max(rotationRange)));
-        squareObject.transform.localScale = new Vector3(size, size, 1f);
+        Sprite sprite = backgroundSprite != null ? backgroundSprite : squareSprite;
+        // Imported sprites have their own dimensions and pixels-per-unit. Keep the
+        // configured size independent of those settings without distorting the image.
+        float spriteLength = Mathf.Max(sprite.rect.width, sprite.rect.height) / sprite.pixelsPerUnit;
+        float scale = size / Mathf.Max(spriteLength, 0.0001f);
+        squareObject.transform.localScale = new Vector3(scale, scale, 1f);
 
         SpriteRenderer spriteRenderer = squareObject.GetComponent<SpriteRenderer>();
-        spriteRenderer.sprite = squareSprite;
+        spriteRenderer.sprite = sprite;
         spriteRenderer.color = squareColor;
         spriteRenderer.sortingLayerName = sortingLayerName;
         spriteRenderer.sortingOrder = sortingOrder;

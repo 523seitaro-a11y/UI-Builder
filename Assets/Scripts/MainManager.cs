@@ -92,7 +92,8 @@ public class MainManager : MonoBehaviour
 
     private void UpdateLongPressRetry()
     {
-        if (stageManager == null || stageManager.CurrentMode != StageManager.StageMode.Play)
+        if (stageManager == null || stageManager.CurrentMode != StageManager.StageMode.Play ||
+            stageManager.IsPlayerDying)
         {
             CancelPointerOperation();
             return;
