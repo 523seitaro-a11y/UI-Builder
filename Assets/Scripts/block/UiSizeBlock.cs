@@ -48,6 +48,7 @@ public sealed class UiSizeBlock : MonoBehaviour,
     private readonly RaycastHit2D[] liftHits = new RaycastHit2D[16];
 
     public bool IsOperating => false;
+    public bool IsAnimatingOptions => isAnimating;
 
     public void Configure(
         BlockManager manager,

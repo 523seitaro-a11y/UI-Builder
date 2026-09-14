@@ -339,6 +339,14 @@ public class BlockManager : MonoBehaviour
     [Min(1f)]
     [SerializeField] private float placedHoverScaleMultiplier = 1.15f;
 
+    [Tooltip("3x3や3x6など、大きい配置済みブロックのホバー拡大倍率です。")]
+    [Min(1f)]
+    [SerializeField] private float largePlacedHoverScaleMultiplier = 1.05f;
+
+    [Tooltip("ResetButton/RetryBlockのホバー拡大倍率です。")]
+    [Min(1f)]
+    [SerializeField] private float resetPlacedHoverScaleMultiplier = 1.02f;
+
     [Tooltip("配置済みブロックのサイズが変化する速さです。0なら瞬時に切り替わります。")]
     [Min(0f)]
     [SerializeField] private float placedHoverScaleSpeed;
@@ -670,13 +678,6 @@ public class BlockManager : MonoBehaviour
         PlacedBlock hovered = allowHover && activePreview == null
             ? FindPlacedBlockForBuildMode(screenPosition)
             : null;
-        // Tracks remain draggable, but only handles trigger scrollbar hover visuals.
-        if (hovered != null && IsScrollBar(hovered.definition) &&
-            (hovered.bgmHandleCollider == null || !hovered.bgmHandleCollider.enabled ||
-             !hovered.bgmHandleCollider.OverlapPoint(ScreenToWorld(screenPosition))))
-        {
-            hovered = null;
-        }
 
         if (hovered != hoveredPlacedBlockForSound)
         {
@@ -689,7 +690,7 @@ public class BlockManager : MonoBehaviour
                 }
                 else
                 {
-                AudioManager.Instance?.PlayBlockHoverSound();
+                    AudioManager.Instance?.PlayBlockHoverSound();
                 }
             }
         }
@@ -705,14 +706,53 @@ public class BlockManager : MonoBehaviour
                 continue;
             }
 
-            Vector3 target = block.baseScale *
-                             (block == hovered ? Mathf.Max(1f, placedHoverScaleMultiplier) : 1f);
+            float hoverScale = block == hovered
+                ? GetPlacedHoverScaleMultiplier(block)
+                : 1f;
+            Vector3 target = block.baseScale * hoverScale;
             block.instance.transform.localScale = Vector3.Lerp(
                 block.instance.transform.localScale,
                 target,
                 interpolation);
             ApplyBuildModeHoverDepth(block, block == hovered);
         }
+    }
+
+    private float GetPlacedHoverScaleMultiplier(PlacedBlock block)
+    {
+        if (block?.definition == null)
+        {
+            return Mathf.Max(1f, placedHoverScaleMultiplier);
+        }
+
+        if (IsResetLikeBlock(block.definition))
+        {
+            return Mathf.Max(1f, resetPlacedHoverScaleMultiplier);
+        }
+
+        if (IsLargePlacedHoverBlock(block.definition))
+        {
+            return Mathf.Max(1f, largePlacedHoverScaleMultiplier);
+        }
+
+        return Mathf.Max(1f, placedHoverScaleMultiplier);
+    }
+
+    private static bool IsResetLikeBlock(BlockDefinition definition)
+    {
+        string displayName = definition.displayName ?? string.Empty;
+        return definition.isRetryBlock ||
+               displayName.IndexOf("Retry", StringComparison.OrdinalIgnoreCase) >= 0 ||
+               displayName.IndexOf("Reset", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private static bool IsLargePlacedHoverBlock(BlockDefinition definition)
+    {
+        Vector2Int footprint = GetValidFootprint(definition);
+        int minSide = Mathf.Min(footprint.x, footprint.y);
+        int maxSide = Mathf.Max(footprint.x, footprint.y);
+        int area = footprint.x * footprint.y;
+        return minSide >= 3 && (maxSide >= 3 || area >= 9);
     }
 
     private void ApplyBuildModeHoverDepth(PlacedBlock block, bool hovered)
@@ -971,6 +1011,8 @@ public class BlockManager : MonoBehaviour
         {
             SetBgmTrackSegment(trackOutline, -2f, 2f, 0.76f, Color.black, isVertical);
         }
+
+        ConfigureScrollBarBuildDragHitArea(target.transform, isVertical);
     }
 
     private PlacedBlock FindPlacedBlock(Vector2 screenPosition)
@@ -1431,6 +1473,11 @@ public class BlockManager : MonoBehaviour
         }
 
         brightnessController?.ResetBrightness();
+    }
+
+    public void ResetBigUiSizeMode()
+    {
+        SetBigUiSizeMode(BigUiSizeMode.Full, true);
     }
 
     private PlacedBlock CreatePlacedBlock()
@@ -2539,7 +2586,9 @@ public class BlockManager : MonoBehaviour
 
         foreach (IBlockOperationState state in block.operationStates)
         {
-            if (state is UiSizeBlock sizeBlock && sizeBlock.IsSelectedRenderer(source))
+            if (state is UiSizeBlock sizeBlock &&
+                (sizeBlock.IsSelectedRenderer(source) ||
+                 sizeBlock.IsAnimatingOptions && IsUiSizeOptionRenderer(source)))
             {
                 return false;
             }
@@ -2728,6 +2777,8 @@ public class BlockManager : MonoBehaviour
         sourceHoverScaleMultiplier = Mathf.Max(1f, sourceHoverScaleMultiplier);
         sourceHoverScaleSpeed = Mathf.Max(0f, sourceHoverScaleSpeed);
         placedHoverScaleMultiplier = Mathf.Max(1f, placedHoverScaleMultiplier);
+        largePlacedHoverScaleMultiplier = Mathf.Max(1f, largePlacedHoverScaleMultiplier);
+        resetPlacedHoverScaleMultiplier = Mathf.Max(1f, resetPlacedHoverScaleMultiplier);
         placedHoverScaleSpeed = Mathf.Max(0f, placedHoverScaleSpeed);
         playModeHoverOutlineWidth = Mathf.Max(0f, playModeHoverOutlineWidth);
         bgmTrackRightOpacity = Mathf.Clamp01(bgmTrackRightOpacity);
@@ -2911,6 +2962,12 @@ public class BlockManager : MonoBehaviour
         handleCollider.size = Vector2.one;
         handleCollider.isTrigger = false;
 
+        GameObject dragHitArea = new GameObject("BuildDragHitArea");
+        dragHitArea.transform.SetParent(template.transform, false);
+        BoxCollider2D dragHitCollider = dragHitArea.AddComponent<BoxCollider2D>();
+        dragHitCollider.isTrigger = true;
+        ConfigureScrollBarBuildDragHitArea(template.transform, definition.isBgmVertical);
+
         if (definition.isBrightnessScrollBar && definition.brightnessScrollBarSprite != null)
         {
             GameObject dragVisual = new GameObject("BrightnessDragVisual");
@@ -2924,6 +2981,27 @@ public class BlockManager : MonoBehaviour
 
         definition.worldTemplate = template;
         template.SetActive(false);
+    }
+
+    private static void ConfigureScrollBarBuildDragHitArea(Transform root, bool isVertical)
+    {
+        Transform dragHitArea = root.Find("BuildDragHitArea");
+        BoxCollider2D dragHitCollider = dragHitArea != null
+            ? dragHitArea.GetComponent<BoxCollider2D>()
+            : null;
+        if (dragHitArea == null || dragHitCollider == null)
+        {
+            return;
+        }
+
+        dragHitArea.localPosition = Vector3.zero;
+        dragHitArea.localRotation = Quaternion.identity;
+        dragHitArea.localScale = Vector3.one;
+        dragHitCollider.offset = Vector2.zero;
+        dragHitCollider.size = isVertical
+            ? new Vector2(0.76f, 4f)
+            : new Vector2(4f, 0.76f);
+        dragHitCollider.isTrigger = true;
     }
 
     private void DetectScrollBarCrush(

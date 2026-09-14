@@ -356,15 +356,15 @@ public class StageManager : MonoBehaviour
 
     private void ApplyStageInformation()
     {
-        string label = $"Stage{stageNumber}";
+        string stageLabel = $"STAGE {stageNumber}";
         if (pauseStageText != null)
         {
-            pauseStageText.text = label;
+            pauseStageText.text = stageLabel;
         }
 
         if (resultStageText != null)
         {
-            resultStageText.text = label;
+            resultStageText.text = stageLabel;
         }
 
         if (nextStageButton != null)
@@ -1099,6 +1099,7 @@ public class StageManager : MonoBehaviour
         }
 
         blockManager?.ResetBgmScrollBarVolume();
+        blockManager?.ResetBigUiSizeMode();
         ResetKeyGimmick();
         ApplyPlayerStartPosition();
         Physics2D.SyncTransforms();

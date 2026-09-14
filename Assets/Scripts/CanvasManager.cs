@@ -80,6 +80,26 @@ public class CanvasManager : MonoBehaviour
     [Tooltip("ゲームのTime Scaleが0でもUIを動かします。")]
     [SerializeField] private bool useUnscaledTime = true;
 
+    [Header("配置完了時のSwitchアニメーション")]
+    [SerializeField] private bool animateSwitchWhenReady = true;
+
+    [Min(1f)]
+    [SerializeField] private float readySwitchPulseScale = 1.12f;
+
+    [Min(0f)]
+    [SerializeField] private float readySwitchPulseUpDuration = 0.08f;
+
+    [Min(0f)]
+    [SerializeField] private float readySwitchPulseDownDuration = 0.08f;
+
+    [Min(0f)]
+    [SerializeField] private float readySwitchPulseGap = 0.04f;
+
+    [Min(0f)]
+    [SerializeField] private float readySwitchRepeatDelay = 0.45f;
+
+    [SerializeField] private Ease readySwitchPulseEase = Ease.OutCubic;
+
     private Vector2 originalAnchoredPosition;
     private Tweener panelTween;
     private bool hasOriginalPosition;
@@ -97,6 +117,11 @@ public class CanvasManager : MonoBehaviour
     private bool isGameStartHovered;
     private Tweener gameStartScaleTween;
     private bool isPaused;
+    private Vector3 panelSwitchNormalScale;
+    private Vector2 panelSwitchNormalAnchoredPosition;
+    private bool hasPanelSwitchTransform;
+    private Sequence readySwitchSequence;
+    private bool isReadySwitchAnimating;
 
     private void Awake()
     {
@@ -104,6 +129,7 @@ public class CanvasManager : MonoBehaviour
         CacheOriginalPosition();
         CacheGameStartColors();
         CacheGameStartScale();
+        CachePanelSwitchTransform();
     }
 
     private void OnEnable()
@@ -112,6 +138,7 @@ public class CanvasManager : MonoBehaviour
         CacheOriginalPosition();
         CacheGameStartColors();
         CacheGameStartScale();
+        CachePanelSwitchTransform();
 
         if (blockManager != null)
         {
@@ -133,6 +160,7 @@ public class CanvasManager : MonoBehaviour
 
         UpdateRequiredBlocksPlacedState();
         UpdateGameStartButtonHover(Input.mousePosition, Input.touchCount == 0);
+        UpdateReadySwitchAnimation();
 
         if (panelSwitch == null || !TryGetPointerDownPosition(out Vector2 screenPosition))
         {
@@ -164,6 +192,7 @@ public class CanvasManager : MonoBehaviour
         }
 
         ResetGameStartHover();
+        StopReadySwitchAnimation();
     }
 
     private void HandleDragStateChanged(bool isDragging)
@@ -241,6 +270,7 @@ public class CanvasManager : MonoBehaviour
         if (paused)
         {
             ResetGameStartHover();
+            StopReadySwitchAnimation();
         }
     }
 
@@ -319,6 +349,116 @@ public class CanvasManager : MonoBehaviour
         {
             ResetGameStartHover();
         }
+    }
+
+    private void UpdateReadySwitchAnimation()
+    {
+        bool shouldAnimate =
+            !isPaused &&
+            animateSwitchWhenReady &&
+            blockManager != null &&
+            blockManager.IsBuildMode &&
+            AreRequiredBlocksPlaced &&
+            ShouldRaisePanel &&
+            panelSwitch != null &&
+            panelSwitch.gameObject.activeInHierarchy;
+
+        if (shouldAnimate)
+        {
+            StartReadySwitchAnimation();
+        }
+        else
+        {
+            StopReadySwitchAnimation();
+        }
+    }
+
+    private void StartReadySwitchAnimation()
+    {
+        if (isReadySwitchAnimating)
+        {
+            return;
+        }
+
+        CachePanelSwitchTransform();
+        if (!hasPanelSwitchTransform || panelSwitch == null)
+        {
+            return;
+        }
+
+        isReadySwitchAnimating = true;
+        Vector3 pulseScale = panelSwitchNormalScale * Mathf.Max(1f, readySwitchPulseScale);
+
+        readySwitchSequence?.Kill();
+        readySwitchSequence = DOTween.Sequence()
+            .SetUpdate(useUnscaledTime)
+            .SetLink(gameObject)
+            .Append(panelSwitch.DOScale(pulseScale, readySwitchPulseUpDuration)
+                .SetEase(readySwitchPulseEase))
+            .Append(panelSwitch.DOScale(panelSwitchNormalScale, readySwitchPulseDownDuration)
+                .SetEase(readySwitchPulseEase))
+            .AppendInterval(readySwitchPulseGap)
+            .Append(panelSwitch.DOScale(pulseScale, readySwitchPulseUpDuration)
+                .SetEase(readySwitchPulseEase))
+            .Append(panelSwitch.DOScale(panelSwitchNormalScale, readySwitchPulseDownDuration)
+                .SetEase(readySwitchPulseEase))
+            .AppendInterval(readySwitchRepeatDelay)
+            .SetLoops(-1)
+            .OnUpdate(KeepPanelSwitchTopEdgeFixed);
+    }
+
+    private void StopReadySwitchAnimation()
+    {
+        if (!isReadySwitchAnimating && readySwitchSequence == null)
+        {
+            return;
+        }
+
+        readySwitchSequence?.Kill();
+        readySwitchSequence = null;
+        isReadySwitchAnimating = false;
+        RestorePanelSwitchTransform();
+    }
+
+    private void CachePanelSwitchTransform()
+    {
+        if (hasPanelSwitchTransform || panelSwitch == null)
+        {
+            return;
+        }
+
+        panelSwitchNormalScale = panelSwitch.localScale;
+        panelSwitchNormalAnchoredPosition = panelSwitch.anchoredPosition;
+        hasPanelSwitchTransform = true;
+    }
+
+    private void RestorePanelSwitchTransform()
+    {
+        if (!hasPanelSwitchTransform || panelSwitch == null)
+        {
+            return;
+        }
+
+        panelSwitch.localScale = panelSwitchNormalScale;
+        panelSwitch.anchoredPosition = panelSwitchNormalAnchoredPosition;
+    }
+
+    private void KeepPanelSwitchTopEdgeFixed()
+    {
+        if (!hasPanelSwitchTransform || panelSwitch == null)
+        {
+            return;
+        }
+
+        float height = panelSwitch.rect.height;
+        float topOffsetAtBase =
+            (1f - panelSwitch.pivot.y) * height * panelSwitchNormalScale.y;
+        float topOffsetNow =
+            (1f - panelSwitch.pivot.y) * height * panelSwitch.localScale.y;
+
+        Vector2 anchoredPosition = panelSwitchNormalAnchoredPosition;
+        anchoredPosition.y -= topOffsetNow - topOffsetAtBase;
+        panelSwitch.anchoredPosition = anchoredPosition;
     }
 
     private static void SetCanvasGroupVisible(CanvasGroup group, bool visible)
@@ -566,5 +706,10 @@ public class CanvasManager : MonoBehaviour
         gameStartHoverScaleY = Mathf.Max(1f, gameStartHoverScaleY);
         gameStartHoverScaleDuration = Mathf.Max(0f, gameStartHoverScaleDuration);
         requiredPlacedBlockCount = Mathf.Max(1, requiredPlacedBlockCount);
+        readySwitchPulseScale = Mathf.Max(1f, readySwitchPulseScale);
+        readySwitchPulseUpDuration = Mathf.Max(0f, readySwitchPulseUpDuration);
+        readySwitchPulseDownDuration = Mathf.Max(0f, readySwitchPulseDownDuration);
+        readySwitchPulseGap = Mathf.Max(0f, readySwitchPulseGap);
+        readySwitchRepeatDelay = Mathf.Max(0f, readySwitchRepeatDelay);
     }
 }
