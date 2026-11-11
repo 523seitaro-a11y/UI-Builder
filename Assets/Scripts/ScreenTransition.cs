@@ -56,6 +56,59 @@ public sealed class ScreenTransition : MonoBehaviour
         instance.BeginSceneLoad(sceneName);
     }
 
+    public static void LoadSceneWithIris(string sceneName, Transform target, Camera camera, Shader shader)
+    {
+        if (instance == null || shader == null) { LoadScene(sceneName); return; }
+        if (instance.isTransitioning || string.IsNullOrEmpty(sceneName)) return;
+        instance.isTransitioning = true;
+        Time.timeScale = 1f;
+        instance.transitionRoutine = instance.StartCoroutine(instance.IrisAndLoad(sceneName, target, camera, shader));
+    }
+
+    private IEnumerator IrisAndLoad(string sceneName, Transform target, Camera camera, Shader shader)
+    {
+        Image image = panelObject.GetComponent<Image>();
+        Material material = new Material(shader);
+        panelObject.SetActive(true);
+        panelRect.anchoredPosition = Vector2.zero;
+        image.color = Color.white;
+        image.material = material;
+        Canvas.ForceUpdateCanvases();
+        float elapsed = 0f;
+        const float duration = 0.45f;
+        try
+        {
+            while (elapsed < duration)
+            {
+                Vector2 center = new Vector2(0.5f, 0.5f);
+                if (target != null && target.gameObject.activeInHierarchy && camera != null)
+                {
+                    Vector2 screen = camera.WorldToScreenPoint(target.position);
+                    center = new Vector2(Mathf.Clamp01(screen.x / Screen.width), Mathf.Clamp01(screen.y / Screen.height));
+                }
+                float aspect = (float)Screen.width / Mathf.Max(1, Screen.height);
+                float radius = new Vector2(Mathf.Max(center.x, 1f - center.x) * aspect,
+                    Mathf.Max(center.y, 1f - center.y)).magnitude + 0.01f;
+                float t = Mathf.Clamp01(elapsed / duration);
+                material.SetColor("_Color", PanelColor);
+                material.SetVector("_Center", new Vector4(center.x, center.y, 0f, 0f));
+                material.SetFloat("_Aspect", aspect);
+                material.SetFloat("_Radius", Mathf.Lerp(radius, -0.01f, t * t * t));
+                elapsed += Time.unscaledDeltaTime;
+                yield return null;
+            }
+            material.SetFloat("_Radius", -0.01f);
+            yield return null;
+        }
+        finally
+        {
+            image.material = null;
+            image.color = PanelColor;
+            Destroy(material);
+        }
+        yield return CoverAndLoad(sceneName, true);
+    }
+
     private void Awake()
     {
         if (instance != null && instance != this)
@@ -103,13 +156,16 @@ public sealed class ScreenTransition : MonoBehaviour
         transitionRoutine = StartCoroutine(CoverAndLoad(sceneName));
     }
 
-    private IEnumerator CoverAndLoad(string sceneName)
+    private IEnumerator CoverAndLoad(string sceneName, bool alreadyCovered = false)
     {
         panelObject.SetActive(true);
         Canvas.ForceUpdateCanvases();
         float hiddenY = GetHiddenPositionY();
-        panelRect.anchoredPosition = new Vector2(0f, hiddenY);
-        yield return AnimatePanel(hiddenY, 0f, coverDuration);
+        if (!alreadyCovered)
+        {
+            panelRect.anchoredPosition = new Vector2(0f, hiddenY);
+            yield return AnimatePanel(hiddenY, 0f, coverDuration);
+        }
 
         panelRect.anchoredPosition = Vector2.zero;
         revealOnNextSceneLoad = false;
