@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using DG.Tweening;
 using UnityEngine;
 using UnityEngine.UI;
@@ -20,9 +21,6 @@ public sealed class TitleBuildManager : MonoBehaviour
     private RectTransform dropHint;
     [SerializeField] private Button gameStartButton;
     [SerializeField] private RectTransform transitionOverlay;
-    [Header("音量バーの初期配置（左下セル）")]
-    [SerializeField] private Vector2Int initialBgmCell = new Vector2Int(-8, -2);
-    [SerializeField] private Vector2Int initialSeCell = new Vector2Int(-8, -3);
     [Header("タイトルロゴ")]
     [SerializeField] private SpriteRenderer titleLogo;
     [SerializeField, Range(0f, 1f)] private float buildLogoOpacity = 0.25f;
@@ -38,14 +36,105 @@ public sealed class TitleBuildManager : MonoBehaviour
     [SerializeField] private Rigidbody2D titlePlayer;
     [SerializeField] private Camera titleCamera;
     private Tween playerDropDelay;
-    [SerializeField] private Shader titleIrisShader;
+    [Header("タイトルとステージ選択の横スライド")]
+    [SerializeField] private RectTransform stageSelectCanvas;
+    [SerializeField] private RectTransform titleUiCanvas;
+    [SerializeField, Min(0.01f)] private float pageSlideDuration = 0.6f;
+    [SerializeField] private ButtonHoverOutline backButtonOutline;
+    private CanvasGroup stageSelectInput;
+    private RectTransform[] stageItems;
+    private Vector2[] stagePositions;
+    private RectTransform[] titleItems;
+    private Vector2[] titlePositions;
+    private Vector3 titleCameraPosition;
+    private Tween pageSlide;
+    private float pageOffset;
+    private bool stageSelectOpen;
+
+    private void InitializeStageSelect()
+    {
+        if (stageSelectCanvas == null || titleCamera == null) return;
+        titleCameraPosition = titleCamera.transform.position;
+        stageSelectInput = stageSelectCanvas.gameObject.AddComponent<CanvasGroup>();
+        // Canvas直下には装飾用SpriteRendererの通常Transformも置けます。
+        // UIだけをスライド補正し、ワールドの装飾はカメラ移動に任せます。
+        stageItems = GetDirectUiChildren(stageSelectCanvas);
+        stagePositions = new Vector2[stageItems.Length];
+        for (int i = 0; i < stageItems.Length; i++)
+            stagePositions[i] = stageItems[i].anchoredPosition + Vector2.right * 1920f;
+        titleItems = GetDirectUiChildren(titleUiCanvas);
+        titlePositions = new Vector2[titleItems.Length];
+        for (int i = 0; i < titleItems.Length; i++)
+            titlePositions[i] = titleItems[i].anchoredPosition;
+        SetStageSelectInput(false);
+        Canvas.ForceUpdateCanvases();
+        UpdatePagePositions();
+    }
+
+    private static RectTransform[] GetDirectUiChildren(RectTransform parent)
+    {
+        var items = new List<RectTransform>();
+        foreach (Transform child in parent)
+            if (child is RectTransform rect) items.Add(rect);
+        return items.ToArray();
+    }
 
     public void OpenStageSelect()
     {
-        if (blockManager.IsBuildMode || ScreenTransition.IsTransitioning) return;
+        if (blockManager.IsBuildMode || stageSelectOpen || pageSlide != null ||
+            ScreenTransition.IsTransitioning || stageSelectCanvas == null) return;
+        for (int i = 0; i < titleItems.Length; i++)
+            titlePositions[i] = titleItems[i].anchoredPosition;
+        stageSelectOpen = true;
         blockManager.enabled = false;
-        ScreenTransition.LoadSceneWithIris("StageSelect", titlePlayer != null ? titlePlayer.transform : null,
-            titleCamera, titleIrisShader);
+        blockManager.ShowTitlePlayButtonOutline();
+        SlidePage(1f);
+    }
+
+    public void CloseStageSelect()
+    {
+        if (!stageSelectOpen || pageSlide != null || ScreenTransition.IsTransitioning) return;
+        stageSelectOpen = false;
+        backButtonOutline?.HoldOutlineUntilTransitionEnds(true);
+        SlidePage(0f);
+    }
+
+    private void SetStageSelectInput(bool enabled)
+    {
+        stageSelectInput.interactable = enabled;
+        stageSelectInput.blocksRaycasts = enabled;
+    }
+
+    private void SlidePage(float destination)
+    {
+        SetStageSelectInput(false);
+        pageSlide = DOTween.To(() => pageOffset, value => pageOffset = value,
+                destination, pageSlideDuration)
+            .SetEase(Ease.InOutCubic).SetUpdate(true).SetLink(gameObject)
+            .OnComplete(() =>
+            {
+                UpdatePagePositions();
+                pageSlide = null;
+                SetStageSelectInput(stageSelectOpen);
+                if (stageSelectOpen) blockManager.HideTitlePlayButtonOutline();
+                else backButtonOutline?.HoldOutlineUntilTransitionEnds(false);
+                blockManager.enabled = !stageSelectOpen;
+            });
+    }
+
+    private void UpdatePagePositions()
+    {
+        if (stageItems == null) return;
+        float stageShift = -(1f - pageOffset) * stageSelectCanvas.rect.width;
+        for (int i = 0; i < stageItems.Length; i++)
+            stageItems[i].anchoredPosition = stagePositions[i] + Vector2.right * stageShift;
+        // タイトルのUIは配置モードでも動くため、移動中と選択画面表示中だけ補正します。
+        if (pageSlide != null || pageOffset > 0f)
+            for (int i = 0; i < titleItems.Length; i++)
+                titleItems[i].anchoredPosition = titlePositions[i]
+                    + Vector2.right * (pageOffset * titleUiCanvas.rect.width);
+        titleCamera.transform.position = titleCameraPosition
+            - Vector3.right * (pageOffset * titleCamera.orthographicSize * 2f * titleCamera.aspect);
     }
     private Sequence dragHintPulse;
     private Sequence dropHintPulse;
@@ -70,23 +159,23 @@ public sealed class TitleBuildManager : MonoBehaviour
             Color color = titleLogo.color;
             color.a = buildLogoOpacity;
             titleLogo.color = color;
+            SpriteRenderer gridRenderer = gridBackground != null
+                ? gridBackground.GetComponent<SpriteRenderer>() : null;
+            titleLogo.sortingLayerID = gridRenderer != null ? gridRenderer.sortingLayerID : 0;
+            titleLogo.sortingOrder = gridRenderer != null ? gridRenderer.sortingOrder - 1 : -2;
         }
         if (startedLayout == null) AudioManager.Instance?.StopBgm();
         transitionOverlay.gameObject.SetActive(false);
         gameStartButton.onClick.AddListener(StartTitle);
+        InitializeStageSelect();
     }
 
     private void Start()
     {
         if (startedLayout == null)
         {
-            // 通常の配置済みブロックとして登録するので、ビルド中はそのまま移動できます。
-            // Titleの定義順: Play、TitleBGMScrollBar、TitleSEScrollBar。
-            blockManager.RestorePlacementLayout(new[]
-            {
-                new BlockManager.PlacementSnapshot(1, new Vector3Int(initialBgmCell.x, initialBgmCell.y, 0), false),
-                new BlockManager.PlacementSnapshot(2, new Vector3Int(initialSeCell.x, initialSeCell.y, 0), false)
-            });
+            // Sceneビューで調整した実体の位置を初期配置として使います。
+            blockManager.RestoreScenePlacements();
             return;
         }
 
@@ -99,6 +188,7 @@ public sealed class TitleBuildManager : MonoBehaviour
 
     private void LateUpdate()
     {
+        UpdatePagePositions();
         UpdateDragHint();
         UpdateDropHint();
         if (titleLogo == null || blockManager == null) return;
@@ -235,7 +325,7 @@ public sealed class TitleBuildManager : MonoBehaviour
         }
         float bottomOffset = renderer != null
             ? titlePlayer.transform.position.y - renderer.bounds.min.y : 0.5f;
-        Vector3 spawnPosition = new Vector3(topCenter.x, topCenter.y + bottomOffset + 0.1f, playerZ);
+        Vector3 spawnPosition = new Vector3(titleCameraPosition.x, topCenter.y + bottomOffset + 0.1f, playerZ);
         titlePlayer.transform.position = spawnPosition;
         titlePlayer.position = spawnPosition;
         titlePlayer.linearVelocity = Vector2.zero;
@@ -275,6 +365,8 @@ public sealed class TitleBuildManager : MonoBehaviour
 
     private void OnDestroy()
     {
+        backButtonOutline?.HoldOutlineUntilTransitionEnds(false);
+        pageSlide?.Kill();
         playerDropDelay?.Kill();
         StopDropHint();
         if (dropHint != null) Destroy(dropHint.gameObject);

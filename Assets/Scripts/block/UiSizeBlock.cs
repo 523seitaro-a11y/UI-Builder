@@ -118,6 +118,11 @@ public sealed class UiSizeBlock : MonoBehaviour,
     public void OnPlayModeEntered()
     {
         isPlayMode = true;
+        ResetSizeState();
+    }
+
+    public void ResetSizeState()
+    {
         SetSelectedMode(BlockManager.BigUiSizeMode.Full);
         ApplyClosedState();
     }

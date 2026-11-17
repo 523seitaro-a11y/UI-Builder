@@ -19,6 +19,14 @@ public class BGManager : MonoBehaviour
     [Min(1f)]
     [SerializeField] private float referenceCanvasHeight = 1080f;
 
+    [Tooltip("横方向に背景を生成する画面数。生成数・上限は各画面に適用します。")]
+    [SerializeField, Min(1)] private int horizontalPageCount = 1;
+    [Tooltip("追加ページの方向。1は右、-1は左です。")]
+    [SerializeField] private int horizontalPageDirection = 1;
+
+    [Tooltip("オフの場合は開始時のワールド位置に背景を固定し、カメラ移動に合わせて流します。")]
+    [SerializeField] private bool followCamera = true;
+
     [Header("タイルマップより背面に表示")]
     [Tooltip("タイルマップと同じSorting Layerを指定してください。")]
     [SerializeField] private string sortingLayerName = "Default";
@@ -78,6 +86,7 @@ public class BGManager : MonoBehaviour
         public Transform Transform;
         public float Speed;
         public float HalfSize;
+        public int Page;
     }
 
     private void Start()
@@ -116,9 +125,10 @@ public class BGManager : MonoBehaviour
         CreateRuntimeResources();
 
         int count = Mathf.Min(initialSquareCount, maxSquareCount);
-        for (int i = 0; i < count; i++)
+        for (int page = 0; page < Mathf.Max(1, horizontalPageCount); page++)
         {
-            SpawnSquare(fillVisibleArea: true);
+            for (int i = 0; i < count; i++)
+                SpawnSquare(page, fillVisibleArea: true);
         }
 
         ScheduleNextSpawn();
@@ -150,9 +160,14 @@ public class BGManager : MonoBehaviour
         float currentTime = useUnscaledTime ? Time.unscaledTime : Time.time;
         if (currentTime >= nextSpawnTime)
         {
-            if (activeSquares.Count < maxSquareCount)
+            // 画面外のページも同じ密度で生成し続けます。
+            for (int page = 0; page < Mathf.Max(1, horizontalPageCount); page++)
             {
-                SpawnSquare(fillVisibleArea: false);
+                int count = 0;
+                foreach (FloatingSquare square in activeSquares)
+                    if (square.Page == page) count++;
+                if (count < maxSquareCount)
+                    SpawnSquare(page, fillVisibleArea: false);
             }
 
             ScheduleNextSpawn();
@@ -167,6 +182,8 @@ public class BGManager : MonoBehaviour
         runtimeContainer.localPosition = new Vector3(0f, 0f, distanceFromCamera);
         runtimeContainer.localRotation = Quaternion.identity;
         runtimeContainer.localScale = Vector3.one;
+        if (!followCamera)
+            runtimeContainer.SetParent(null, true);
 
         squareTexture = new Texture2D(1, 1, TextureFormat.RGBA32, false)
         {
@@ -185,7 +202,7 @@ public class BGManager : MonoBehaviour
         squareSprite.name = "BG Square Sprite (Runtime)";
     }
 
-    private void SpawnSquare(bool fillVisibleArea)
+    private void SpawnSquare(int page, bool fillVisibleArea)
     {
         float canvasToWorld = GetCanvasToWorldScale();
         float size = Random.Range(Min(squareSizeRange), Max(squareSizeRange)) * canvasToWorld;
@@ -200,6 +217,7 @@ public class BGManager : MonoBehaviour
         float minX = -halfWidth + halfSize;
         float maxX = halfWidth - halfSize;
         float x = minX <= maxX ? Random.Range(minX, maxX) : 0f;
+        x += page * halfWidth * 2f * (horizontalPageDirection < 0 ? -1f : 1f);
         float y = fillVisibleArea
             ? Random.Range(-halfHeight - halfSize, halfHeight + halfSize)
             : -halfHeight - margin - halfSize;
@@ -226,7 +244,8 @@ public class BGManager : MonoBehaviour
         {
             Transform = squareObject.transform,
             Speed = speed,
-            HalfSize = halfSize
+            HalfSize = halfSize,
+            Page = page
         });
     }
 
@@ -286,6 +305,7 @@ public class BGManager : MonoBehaviour
 
     private void OnValidate()
     {
+        horizontalPageCount = Mathf.Max(1, horizontalPageCount);
         initialSquareCount = Mathf.Max(0, initialSquareCount);
         maxSquareCount = Mathf.Max(1, maxSquareCount);
         referenceCanvasHeight = Mathf.Max(1f, referenceCanvasHeight);

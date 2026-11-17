@@ -11,6 +11,8 @@ public class start_button : MonoBehaviour {
 
     public void OnStageSelectButtonClick()
     {
-        ScreenTransition.LoadScene("StageSelect");
+        TitleBuildManager title = FindFirstObjectByType<TitleBuildManager>();
+        if (title != null) title.OpenStageSelect();
+        else ScreenTransition.LoadScene("StageSelect");
     }
 }

@@ -149,12 +149,47 @@ public class BlockManager : MonoBehaviour
                 definition.isBgmVertical = entry.IsVertical;
                 UpdateBgmFootprint(definition);
             }
-            GameObject instance = Instantiate(definition.worldTemplate, placedBlockParent);
+            GameObject instance = GetBlockInstance(definition);
             instance.name = definition.displayName;
             BeginWorldDrag(definition, instance, false);
             PlaceActiveBlock(entry.Cell);
             ClearDragState(false);
         }
+    }
+
+    private GameObject GetBlockInstance(BlockDefinition definition) => definition.useSceneInstance
+        ? definition.worldTemplate : Instantiate(definition.worldTemplate, placedBlockParent);
+
+    private void ReleaseUnplacedPreview()
+    {
+        if (activeDefinition.useSceneInstance)
+        {
+            RestorePreviewAppearance();
+            RestorePreviewComponents();
+            activePreview.SetActive(false);
+        }
+        else Destroy(activePreview);
+    }
+
+    /// <summary>編集時に配置されたタイトルの実体を、通常の配置済みブロックとして登録します。</summary>
+    public void RestoreScenePlacements()
+    {
+        var layout = new List<PlacementSnapshot>();
+        for (int i = 0; i < blocks.Length; i++)
+        {
+            BlockDefinition definition = blocks[i];
+            if (definition == null || !definition.useSceneInstance || !definition.initiallyPlaced ||
+                definition.worldTemplate == null) continue;
+            Vector2Int footprint = GetValidFootprint(definition);
+            Vector3 center = definition.worldTemplate.transform.position - definition.placementOffset;
+            Vector3 cellCenter = placementTilemap.transform.InverseTransformPoint(center);
+            Vector3 cellSize = placementTilemap.layoutGrid.cellSize;
+            Vector3Int cell = new Vector3Int(
+                Mathf.RoundToInt(cellCenter.x / cellSize.x - footprint.x * 0.5f),
+                Mathf.RoundToInt(cellCenter.y / cellSize.y - footprint.y * 0.5f), 0);
+            layout.Add(new PlacementSnapshot(i, cell, definition.isBgmVertical));
+        }
+        RestorePlacementLayout(layout.ToArray());
     }
 
     public bool AllBlocksPlaced
@@ -197,6 +232,12 @@ public class BlockManager : MonoBehaviour
 
         [Tooltip("フィールドへ複製するワールド側のGameObjectです。SpriteRendererや動作用スクリプトを含められます。")]
         public GameObject worldTemplate;
+
+        [Tooltip("シーンに保存された実体を再利用します（在庫1個のタイトル用）。")]
+        public bool useSceneInstance;
+
+        [Tooltip("シーン上の位置を初期配置として登録します。")]
+        public bool initiallyPlaced;
 
         [Tooltip("このブロックが横・縦に占有するTilemapセル数です。")]
         public Vector2Int footprint = Vector2Int.one;
@@ -950,7 +991,7 @@ public class BlockManager : MonoBehaviour
                 continue;
             }
 
-            GameObject preview = Instantiate(block.worldTemplate, placedBlockParent);
+            GameObject preview = GetBlockInstance(block);
             preview.name = string.IsNullOrWhiteSpace(block.displayName)
                 ? block.worldTemplate.name
                 : block.displayName;
@@ -1394,7 +1435,7 @@ public class BlockManager : MonoBehaviour
         }
         else
         {
-            Destroy(activePreview);
+            ReleaseUnplacedPreview();
             Destroy(activeGridPreview);
             SetSourceActive(activeDefinition, true);
         }
@@ -1585,6 +1626,16 @@ public class BlockManager : MonoBehaviour
     public void ResetBigUiSizeMode()
     {
         SetBigUiSizeMode(BigUiSizeMode.Full, true);
+        foreach (PlacedBlock block in placedBlocks)
+        {
+            foreach (IPlayModeBlockState state in block.playModeStates)
+            {
+                if (state is UiSizeBlock sizeBlock && sizeBlock != null)
+                {
+                    sizeBlock.ResetSizeState();
+                }
+            }
+        }
     }
 
     private PlacedBlock CreatePlacedBlock()
@@ -2488,7 +2539,8 @@ public class BlockManager : MonoBehaviour
                 }
             }
 
-            ApplyOperationColor(block, invertOperatingBlockColors && isOperating);
+            if (!block.definition.isTitlePlayButton)
+                ApplyOperationColor(block, invertOperatingBlockColors && isOperating);
         }
     }
 
@@ -2497,14 +2549,16 @@ public class BlockManager : MonoBehaviour
     // Cell regions use 1-based columns from the left and rows from the top (A1 = 1,1).
     public bool HasForegroundBlockOutlineInCells(RectInt[] regions)
     {
-        if (IsBuildMode || !isActiveAndEnabled || outlineOnlyLayer == null || regions == null)
+        // 遷移中は入力停止のためこのコンポーネントが無効でも、枠が描画される場合があります。
+        // ロゴの透過は入力の有効状態ではなく、実際の枠の表示状態から判定します。
+        if (IsBuildMode || outlineOnlyLayer == null || regions == null)
             return false;
         foreach (PlacedBlock block in placedBlocks)
         {
             if (block.overlayOutlines == null) continue;
             bool outlined = false;
             foreach (BlockOutlineGraphic outline in block.overlayOutlines)
-                if (outline != null && outline.gameObject.activeInHierarchy) outlined = true;
+                if (outline != null && outline.isActiveAndEnabled) outlined = true;
             if (!outlined) continue;
 
             Vector2Int footprint = GetValidFootprint(block.definition);
@@ -2786,6 +2840,28 @@ public class BlockManager : MonoBehaviour
         if (sizeBlock != null)
         {
             sizeBlock.SetDragPreview(dragging, popupSprite);
+        }
+    }
+
+    public void ShowTitlePlayButtonOutline()
+    {
+        foreach (PlacedBlock block in placedBlocks)
+        {
+            if (!block.definition.isTitlePlayButton) continue;
+            SetPlayModeHoverOutline(block, true);
+            ApplyOperationColor(block, true);
+        }
+    }
+
+    /// <summary>タイトルからのスライド完了時に、Playの枠を明示的に解除します。</summary>
+    public void HideTitlePlayButtonOutline()
+    {
+        foreach (PlacedBlock block in placedBlocks)
+        {
+            if (!block.definition.isTitlePlayButton) continue;
+            SetPlayModeHoverOutline(block, false);
+            ApplyOperationColor(block, false);
+            if (pressedPlayModeBlock == block) pressedPlayModeBlock = null;
         }
     }
 
@@ -4308,7 +4384,7 @@ public class BlockManager : MonoBehaviour
             }
             else
             {
-                Destroy(activePreview);
+                ReleaseUnplacedPreview();
                 Destroy(activeGridPreview);
                 SetSourceActive(activeDefinition, true);
             }
