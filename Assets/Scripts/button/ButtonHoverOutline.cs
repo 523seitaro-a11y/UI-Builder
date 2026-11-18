@@ -84,6 +84,7 @@ public sealed class ButtonHoverOutline : MonoBehaviour, IPointerEnterHandler, IP
     public void SetSelectedInversion(bool selected)
     {
         selectedInversion = selected;
+        if (selected) SetOutlineVisible(false);
         if (targetImage != null && selectedSprite != null)
             targetImage.sprite = selected ? selectedSprite : normalSprite;
         if (childTexts != null)
@@ -188,7 +189,8 @@ public sealed class ButtonHoverOutline : MonoBehaviour, IPointerEnterHandler, IP
 
     private void SetOutlineVisible(bool visible)
     {
-        visible = (holdOutline || visible) && (outlineWidth > 0f || worldOutlineWidth > 0f);
+        visible = !selectedInversion && (holdOutline || visible) &&
+            (outlineWidth > 0f || worldOutlineWidth > 0f);
         if (outlineImage != null) outlineImage.gameObject.SetActive(visible);
         if (targetImage != null && inversionMaterial != null)
             targetImage.material = holdOutline || (selectedInversion && selectedSprite == null) ? inversionMaterial : normalMaterial;

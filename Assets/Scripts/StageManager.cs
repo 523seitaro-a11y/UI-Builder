@@ -330,6 +330,8 @@ public class StageManager : MonoBehaviour
         CreateGoalHoverOutline();
 
         ConfigurePauseButtons();
+        ConfigureButtonTextHover(resultBackground);
+        ConfigureButtonTextHover(pauseBackground);
         ResetTransitionOverlay();
         ResetResultBackground();
         ResetPauseBackground();
@@ -848,7 +850,7 @@ public class StageManager : MonoBehaviour
         TMP_Text boldTemplate = FindTextTemplateByFontName("LINESeedJP-Bold SDF");
         TMP_Text extraBoldTemplate = FindExtraBoldTextTemplate();
 
-        ApplyPauseTypography("Image/Stage", boldTemplate, 4f, new Color32(61, 61, 61, 255));
+        ApplyPauseTypography("Image/Stage", FindTextTemplateByFontName("Outfit-ExtraBold SDF"), 4f, new Color32(61, 61, 61, 255));
         TMP_Text pauseHeading = ApplyPauseTypography(
             "Pause",
             boldTemplate,
@@ -934,7 +936,7 @@ public class StageManager : MonoBehaviour
         }
     }
 
-    private static void LoadStageSelectScene() => ScreenTransition.LoadScene("StageSelect");
+    private static void LoadStageSelectScene() => TitleBuildManager.ReturnToStageSelect();
 
     private static void LoadTitleScene() => ScreenTransition.LoadScene("Title");
 
@@ -2559,6 +2561,20 @@ public class StageManager : MonoBehaviour
         }
 
         return button;
+    }
+
+    private static void ConfigureButtonTextHover(RectTransform background)
+    {
+        if (background == null) return;
+
+        foreach (Button button in background.GetComponentsInChildren<Button>(true))
+        {
+            if (button.GetComponentInChildren<TMP_Text>(true) != null &&
+                button.GetComponent<ButtonTextHover>() == null)
+            {
+                button.gameObject.AddComponent<ButtonTextHover>();
+            }
+        }
     }
 
     private void ConfigurePauseButtons()

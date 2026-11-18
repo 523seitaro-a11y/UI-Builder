@@ -381,6 +381,8 @@ public sealed class AudioManager : MonoBehaviour
 
     public void PlaySizeCloseSound() => PlaySe(sizeCloseClip, sizeCloseVolume);
 
+    public void PlayDefaultButtonSound() => PlaySe(defaultButtonClip, defaultButtonVolume);
+
     private void PlaySe(AudioClip clip, float volume)
     {
         if (cursorAudioSource == null || clip == null)
@@ -422,7 +424,7 @@ public sealed class AudioManager : MonoBehaviour
         yield return null;
         if (lastSePlaybackFrame != clickedFrame)
         {
-            PlaySe(defaultButtonClip, defaultButtonVolume);
+            PlayDefaultButtonSound();
         }
     }
 

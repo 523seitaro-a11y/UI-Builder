@@ -6,7 +6,7 @@ public class returnSelect_button : MonoBehaviour {
 
     public void OnButtonClick()
     {
-        ScreenTransition.LoadScene("StageSelect");
+        TitleBuildManager.ReturnToStageSelect();
     }
 
     public void OnTitleButtonClick()

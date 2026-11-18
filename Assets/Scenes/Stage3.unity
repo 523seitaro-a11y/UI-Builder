@@ -1650,8 +1650,8 @@ MonoBehaviour:
       m_Calls: []
   m_text: STAGE 3
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: b745ea105f221bb45a50e1ab7d16153b, type: 2}
-  m_sharedMaterial: {fileID: -4259499787218161454, guid: b745ea105f221bb45a50e1ab7d16153b, type: 2}
+  m_fontAsset: {fileID: 11400000, guid: 7cc5571f3ec95374cba353fe651503fd, type: 2}
+  m_sharedMaterial: {fileID: -5936440893138953593, guid: 7cc5571f3ec95374cba353fe651503fd, type: 2}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []
@@ -5222,8 +5222,8 @@ MonoBehaviour:
       m_Calls: []
   m_text: STAGE 3
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: b745ea105f221bb45a50e1ab7d16153b, type: 2}
-  m_sharedMaterial: {fileID: -4259499787218161454, guid: b745ea105f221bb45a50e1ab7d16153b, type: 2}
+  m_fontAsset: {fileID: 11400000, guid: 7cc5571f3ec95374cba353fe651503fd, type: 2}
+  m_sharedMaterial: {fileID: -5936440893138953593, guid: 7cc5571f3ec95374cba353fe651503fd, type: 2}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []
@@ -5741,8 +5741,8 @@ MonoBehaviour:
       m_Calls: []
   m_text: START
   m_isRightToLeft: 0
-  m_fontAsset: {fileID: 11400000, guid: b745ea105f221bb45a50e1ab7d16153b, type: 2}
-  m_sharedMaterial: {fileID: -4259499787218161454, guid: b745ea105f221bb45a50e1ab7d16153b, type: 2}
+  m_fontAsset: {fileID: 11400000, guid: 7cc5571f3ec95374cba353fe651503fd, type: 2}
+  m_sharedMaterial: {fileID: -5936440893138953593, guid: 7cc5571f3ec95374cba353fe651503fd, type: 2}
   m_fontSharedMaterials: []
   m_fontMaterial: {fileID: 0}
   m_fontMaterials: []
@@ -6052,7 +6052,7 @@ MonoBehaviour:
   stopReleaseVolume: 1
   sizeSelectionClip: {fileID: 8300000, guid: ebd6917337e3f1d438e8dc4a53774ecf, type: 3}
   sizeSelectionVolume: 1
-  sizeOpenClip: {fileID: 8300000, guid: 08cc04ffa43a6f24d926d5e02822f965, type: 3}
+  sizeOpenClip: {fileID: 8300000, guid: cda4fd208618b8c42b6e91b760dbe6ef, type: 3}
   sizeOpenVolume: 1
   sizeCloseClip: {fileID: 8300000, guid: b602ced04cb1683408eba7298d18a324, type: 3}
   sizeCloseVolume: 1

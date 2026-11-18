@@ -555,6 +555,18 @@ public class Player : MonoBehaviour
 
     private int GetFrameCount() => animationState == AnimationState.Run ? 4 : 2;
 
+    // UI演出も実際のプレイヤーと同じ歩行フレーム・間隔を使用します。
+    public Sprite GetWalkingSprite(float elapsed)
+    {
+        float d0 = Mathf.Max(0.01f, run0Duration);
+        float d1 = Mathf.Max(0.01f, run1Duration);
+        float d2 = Mathf.Max(0.01f, run2Duration);
+        float d3 = Mathf.Max(0.01f, run3Duration);
+        float time = Mathf.Repeat(elapsed, d0 + d1 + d2 + d3);
+        Sprite frame = time < d0 ? run0 : time < d0 + d1 ? run1 : time < d0 + d1 + d2 ? run2 : run3;
+        return frame != null ? frame : idle0;
+    }
+
     private float GetCurrentFrameDuration()
     {
         if (animationState == AnimationState.Run)

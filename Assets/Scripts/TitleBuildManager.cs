@@ -1,16 +1,31 @@
 using System.Collections.Generic;
 using DG.Tweening;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 /// <summary>配置はステージ共通のBlockManager/CanvasManagerに任せ、タイトルの開始だけを制御します。</summary>
 public sealed class TitleBuildManager : MonoBehaviour
 {
     private static BlockManager.PlacementSnapshot[] startedLayout;
+    private static int? returnStage;
 
     // Domain Reloadを無効にしたEditorでも、新しいゲーム起動はビルドモードから始めます。
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
-    private static void ResetSession() => startedLayout = null;
+    private static void ResetSession()
+    {
+        startedLayout = null;
+        returnStage = null;
+    }
+
+    public static void ReturnToStageSelect()
+    {
+        if (ScreenTransition.IsTransitioning) return;
+        string sceneName = SceneManager.GetActiveScene().name;
+        returnStage = sceneName.StartsWith("Stage") &&
+            int.TryParse(sceneName.Substring(5), out int stageNumber) ? stageNumber : 0;
+        ScreenTransition.LoadScene("Title");
+    }
 
     [SerializeField] private BlockManager blockManager;
     [SerializeField] private CanvasManager canvasManager;
@@ -50,10 +65,17 @@ public sealed class TitleBuildManager : MonoBehaviour
     private Tween pageSlide;
     private float pageOffset;
     private bool stageSelectOpen;
+    private select_button stageSelector;
+    private Sequence playerEntrance;
+    private Transform walkingPlayer;
+    private bool playerEntered;
 
     private void InitializeStageSelect()
     {
         if (stageSelectCanvas == null || titleCamera == null) return;
+        stageSelector = stageSelectCanvas.GetComponentInChildren<select_button>(true);
+        if (stageSelector == null) stageSelector = FindFirstObjectByType<select_button>();
+        stageSelector?.SetLaunchReady(false);
         titleCameraPosition = titleCamera.transform.position;
         stageSelectInput = stageSelectCanvas.gameObject.AddComponent<CanvasGroup>();
         // Canvas直下には装飾用SpriteRendererの通常Transformも置けます。
@@ -83,6 +105,7 @@ public sealed class TitleBuildManager : MonoBehaviour
     {
         if (blockManager.IsBuildMode || stageSelectOpen || pageSlide != null ||
             ScreenTransition.IsTransitioning || stageSelectCanvas == null) return;
+        AudioManager.Instance?.PlayDefaultButtonSound();
         for (int i = 0; i < titleItems.Length; i++)
             titlePositions[i] = titleItems[i].anchoredPosition;
         stageSelectOpen = true;
@@ -93,7 +116,7 @@ public sealed class TitleBuildManager : MonoBehaviour
 
     public void CloseStageSelect()
     {
-        if (!stageSelectOpen || pageSlide != null || ScreenTransition.IsTransitioning) return;
+        if (!stageSelectOpen || pageSlide != null || playerEntrance != null || ScreenTransition.IsTransitioning) return;
         stageSelectOpen = false;
         backButtonOutline?.HoldOutlineUntilTransitionEnds(true);
         SlidePage(0f);
@@ -119,6 +142,103 @@ public sealed class TitleBuildManager : MonoBehaviour
                 if (stageSelectOpen) blockManager.HideTitlePlayButtonOutline();
                 else backButtonOutline?.HoldOutlineUntilTransitionEnds(false);
                 blockManager.enabled = !stageSelectOpen;
+                if (stageSelectOpen && !playerEntered) PlayPlayerEntrance();
+            });
+    }
+
+    private void HideTitlePlayer()
+    {
+        playerDropDelay?.Kill();
+        playerDropDelay = null;
+        if (titlePlayer != null) titlePlayer.gameObject.SetActive(false);
+    }
+
+    private void PlayPlayerEntrance()
+    {
+        RectTransform frame = stageSelector != null ? stageSelector.LaunchFrame : null;
+        Player source = titlePlayer != null ? titlePlayer.GetComponent<Player>() : null;
+        if (frame == null || source == null) return;
+        SetStageSelectInput(false);
+        HideTitlePlayer();
+        // UIの固定ピクセルサイズではなく、ゲーム内と同じワールドサイズで描画します。
+        var visual = new GameObject("Stage Select Walking Player", typeof(SpriteRenderer));
+        walkingPlayer = visual.transform;
+        walkingPlayer.localScale = titlePlayer.transform.lossyScale;
+        SpriteRenderer renderer = visual.GetComponent<SpriteRenderer>();
+        SpriteRenderer original = titlePlayer.GetComponent<SpriteRenderer>();
+        renderer.sharedMaterial = original.sharedMaterial;
+        renderer.sortingLayerID = original.sortingLayerID;
+        renderer.sortingOrder = original.sortingOrder;
+        renderer.flipX = true;
+        renderer.sprite = source.GetWalkingSprite(0f);
+        Canvas canvas = frame.GetComponentInParent<Canvas>();
+        Camera uiCamera = canvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : canvas.worldCamera;
+        Vector2 screenTarget = RectTransformUtility.WorldToScreenPoint(uiCamera, frame.TransformPoint(frame.rect.center));
+        float depth = Mathf.Abs(titleCamera.transform.position.z - titlePlayer.transform.position.z);
+        Vector3 target = titleCamera.ScreenToWorldPoint(new Vector3(screenTarget.x, screenTarget.y, depth));
+        Vector3 start = titleCamera.ViewportToWorldPoint(new Vector3(1f, 0f, depth));
+        start.x += renderer.bounds.extents.x;
+        Vector3 approach = target + Vector3.right * (renderer.bounds.size.x * 0.75f);
+        float elapsed = 0f;
+        float floorY = start.y;
+        // タイルマップのColliderだけを対象にし、配置ブロックやプレイヤーを床と誤認しません。
+        bool TryGetFloor(float x, out float height)
+        {
+            height = floorY;
+            Vector3 rayStart = new Vector3(x, titleCamera.transform.position.y + titleCamera.orthographicSize + 1f, start.z);
+            foreach (RaycastHit2D hit in Physics2D.RaycastAll(rayStart, Vector2.down, titleCamera.orthographicSize * 2f + 2f))
+            {
+                if (hit.collider.GetComponent<UnityEngine.Tilemaps.Tilemap>() == null || hit.normal.y < 0.5f) continue;
+                height = hit.point.y;
+                return true;
+            }
+            return false;
+        }
+        void PlaceOnGround(float x)
+        {
+            if (TryGetFloor(x, out float height)) floorY = height;
+            float footOffset = -renderer.sprite.bounds.min.y * walkingPlayer.lossyScale.y;
+            walkingPlayer.position = new Vector3(x, floorY + footOffset, start.z);
+        }
+        Physics2D.SyncTransforms();
+        PlaceOnGround(start.x);
+        // 進行方向に床が途切れる位置を探し、足が端から出る前に吸い込みへ移ります。
+        const float groundProbeStep = 0.05f;
+        float edgeMargin = renderer.bounds.extents.x * 0.5f;
+        for (float x = start.x; x >= approach.x; x -= groundProbeStep)
+        {
+            if (TryGetFloor(x, out _)) continue;
+            approach.x = Mathf.Min(start.x, x + groundProbeStep + edgeMargin);
+            break;
+        }
+        float duration = Mathf.Max(0.2f, Mathf.Abs(start.x - approach.x) / 6f);
+        float walkX = start.x;
+        Vector3 frameScale = frame.localScale;
+        playerEntrance = DOTween.Sequence().SetUpdate(true).SetLink(gameObject)
+            .Append(DOTween.To(() => walkX, x =>
+            {
+                walkX = x;
+                elapsed += Time.unscaledDeltaTime;
+                renderer.sprite = source.GetWalkingSprite(elapsed);
+                PlaceOnGround(x);
+            }, approach.x, duration).SetEase(Ease.Linear))
+            .Append(walkingPlayer.DOMove(target, 0.45f).SetEase(Ease.InCubic))
+            .Join(walkingPlayer.DOScale(Vector3.zero, 0.45f).SetEase(Ease.InCubic))
+            .AppendCallback(() =>
+            {
+                walkingPlayer.gameObject.SetActive(false);
+                if (stageSelector.PlayerFace != null) stageSelector.PlayerFace.gameObject.SetActive(true);
+                AudioManager.Instance?.PlayGoalSpriteChangeSound();
+            })
+            .Append(frame.DOScale(frameScale * 1.2f, 0.125f).SetEase(Ease.OutCubic))
+            .Append(frame.DOScale(frameScale, 0.125f).SetEase(Ease.InOutSine))
+            .OnComplete(() =>
+            {
+                playerEntrance = null;
+                playerEntered = true;
+                Destroy(visual);
+                stageSelector.SetLaunchReady(true);
+                SetStageSelectInput(true);
             });
     }
 
@@ -172,18 +292,39 @@ public sealed class TitleBuildManager : MonoBehaviour
 
     private void Start()
     {
+        int? stageToRestore = returnStage;
+        returnStage = null;
         if (startedLayout == null)
         {
             // Sceneビューで調整した実体の位置を初期配置として使います。
             blockManager.RestoreScenePlacements();
-            return;
+            if (!stageToRestore.HasValue) return;
         }
-
-        // 他コンポーネントのAwakeでテンプレート生成が完了してから復元します。
-        blockManager.RestorePlacementLayout(startedLayout);
+        else
+        {
+            // 他コンポーネントのAwakeでテンプレート生成が完了してから復元します。
+            blockManager.RestorePlacementLayout(startedLayout);
+        }
         starting = true;
         canvasManager.SetPaused(true);
         EnterPlayMode();
+
+        if (stageToRestore.HasValue && stageSelectInput != null)
+        {
+            playerEntered = true;
+            HideTitlePlayer();
+            stageSelector?.SetLaunchReady(true);
+            FindFirstObjectByType<select_button>()?.SelectFrameStage(stageToRestore.Value);
+            for (int i = 0; i < titleItems.Length; i++)
+                titlePositions[i] = titleItems[i].anchoredPosition;
+            stageSelectOpen = true;
+            pageOffset = 1f;
+            blockManager.enabled = false;
+            blockManager.HideTitlePlayButtonOutline();
+            SetStageSelectInput(true);
+            Canvas.ForceUpdateCanvases();
+            UpdatePagePositions();
+        }
     }
 
     private void LateUpdate()
@@ -309,7 +450,7 @@ public sealed class TitleBuildManager : MonoBehaviour
 
     private void DropPlayer()
     {
-        if (titlePlayer == null || titleCamera == null || blockManager.IsBuildMode) return;
+        if (titlePlayer == null || titleCamera == null || blockManager.IsBuildMode || playerEntered || playerEntrance != null) return;
         // 非アクティブ時のRigidbody2D.positionは、再有効化時に保存済みTransformで
         // 上書きされるため、Awake/OnEnableと物理ボディ生成の後で出現位置を設定します。
         titlePlayer.simulated = false;
@@ -365,6 +506,8 @@ public sealed class TitleBuildManager : MonoBehaviour
 
     private void OnDestroy()
     {
+        playerEntrance?.Kill();
+        if (walkingPlayer != null) Destroy(walkingPlayer.gameObject);
         backButtonOutline?.HoldOutlineUntilTransitionEnds(false);
         pageSlide?.Kill();
         playerDropDelay?.Kill();

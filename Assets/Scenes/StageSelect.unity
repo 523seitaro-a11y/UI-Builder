@@ -5361,7 +5361,7 @@ MonoBehaviour:
   stopReleaseVolume: 1
   sizeSelectionClip: {fileID: 8300000, guid: ebd6917337e3f1d438e8dc4a53774ecf, type: 3}
   sizeSelectionVolume: 1
-  sizeOpenClip: {fileID: 8300000, guid: 08cc04ffa43a6f24d926d5e02822f965, type: 3}
+  sizeOpenClip: {fileID: 8300000, guid: cda4fd208618b8c42b6e91b760dbe6ef, type: 3}
   sizeOpenVolume: 1
   sizeCloseClip: {fileID: 8300000, guid: b602ced04cb1683408eba7298d18a324, type: 3}
   sizeCloseVolume: 1

@@ -12,7 +12,7 @@ public class MainManager : MonoBehaviour
     [SerializeField] private StageManager stageManager;
     [SerializeField] private BlockManager blockManager;
 
-    [Tooltip("空白を押し続けてからリトライするまでの秒数です。")]
+    [Tooltip("0.5秒の長押しで表示が始まってからリトライするまでの秒数です。")]
     [Min(0f)]
     [SerializeField] private float longPressDuration = 0.8f;
 
@@ -70,6 +70,9 @@ public class MainManager : MonoBehaviour
     private Material retryCursorMaterial;
     private Tween retryHoldTween;
     private Tween retryScaleTween;
+    private const float RetryHoldStartDelay = 0.5f;
+    private bool isRetryHoldPending;
+    private float retryPointerDownTime;
     private bool isRetryHoldActive;
     private bool hasTransferredToBlock;
     private bool isRetryCursorHiding;
@@ -101,11 +104,7 @@ public class MainManager : MonoBehaviour
 
         if (!TryGetPointerState(out Vector2 screenPosition, out PointerPhase phase))
         {
-            if (hasTransferredToBlock)
-            {
-                CancelPointerOperation();
-            }
-
+            CancelPointerOperation();
             return;
         }
 
@@ -128,15 +127,14 @@ public class MainManager : MonoBehaviour
                 return;
             }
 
-            BeginRetryHold(screenPosition);
+            isRetryHoldPending = true;
+            retryPointerDownTime = Time.unscaledTime;
         }
 
-        if (!isRetryHoldActive)
+        if (!isRetryHoldPending && !isRetryHoldActive)
         {
             return;
         }
-
-        UpdateRetryCursorPosition(screenPosition);
 
         if (phase == PointerPhase.Ended)
         {
@@ -151,10 +149,22 @@ public class MainManager : MonoBehaviour
             return;
         }
 
+        if (isRetryHoldPending)
+        {
+            if (Time.unscaledTime - retryPointerDownTime < RetryHoldStartDelay)
+            {
+                return;
+            }
+
+            BeginRetryHold(screenPosition);
+        }
+
+        UpdateRetryCursorPosition(screenPosition);
     }
 
     private void BeginRetryHold(Vector2 screenPosition)
     {
+        isRetryHoldPending = false;
         isRetryHoldActive = true;
         UpdateRetryCursorPosition(screenPosition);
         SetRetryFillProgress(0f);
@@ -197,6 +207,7 @@ public class MainManager : MonoBehaviour
 
     private void CancelRetryHold()
     {
+        isRetryHoldPending = false;
         isRetryHoldActive = false;
         retryHoldTween?.Kill();
         retryHoldTween = null;
